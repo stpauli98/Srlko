@@ -1,68 +1,57 @@
-<p align="center">
-  <img src="images/slawk.png" alt="Slawk" width="400">
-</p>
+# Srlko
 
-<p align="center">
-  An open-source Slack clone built in 14 days with Claude Code.<br>
-  Slack charges $8/user/month. A 50-person org pays $5,000/year.<br>
-  This is the experiment: can any startup self-build and host an alternative for $100/year total?
-</p>
+Real-time chat and 1-on-1 audio call platform (Slack / Discord style).
 
-<p align="center">
-  <b>Stack:</b> Node.js · PostgreSQL · Prisma · Socket.io · React · Vite · Tailwind<br>
-  <b>Features:</b> Channels · Threads · Voice calls · File uploads · Search · Admin panel · Mobile responsive<br>
-  <b>Vision:</b> minimalist · familiar · fast · safe · open-source
-</p>
+## Stack
 
-## [Day 14](https://www.linkedin.com/posts/nathancavaglione_day-1414-slack-took-7-years-and-340m-to-activity-7437875121870163969-Hxur?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
+- **Frontend:** React 19 + Vite + TypeScript + Tailwind CSS + Zustand
+- **Backend:** Node.js 22 + Express + Socket.io + Prisma
+- **Database:** PostgreSQL
+- **Real-time chat:** Socket.io
+- **Voice calls:** WebRTC (Socket.io as signaling server)
 
-<img src="images/day_14.gif" alt="Day 14" width="800">
+## MVP features
 
-## [Day 13](https://www.linkedin.com/posts/nathancavaglione_day-1314-cloning-slack-with-claude-code-activity-7437474978582716417-23R_?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
+- Email / password auth (JWT)
+- Channels (public + private, grouped chat)
+- Direct messages with read receipts and reactions
+- Message search
+- 1-on-1 audio calls ("huddles")
+- Presence (online / offline)
+- Unreads inbox
+- Mobile-responsive layout
 
-<img src="images/day_13.png" alt="Day 13" width="800">
+## Local development
 
-## [Day 12](https://www.linkedin.com/posts/nathancavaglione_day-1214-cloning-slack-with-claude-code-activity-7437209559691259905-qKE-?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
+```bash
+# 1. Start Postgres
+docker compose up -d
 
-<img src="images/day_12.gif" alt="Day 12" width="240">
+# 2. Backend
+cd backend
+cp .env.example .env             # edit JWT_SECRET
+npm install
+npx prisma migrate dev --name init
+npm run db:seed                  # optional: creates alice@srlko.dev / bob@srlko.dev (pw: password123)
+npm run dev                      # http://localhost:3000
 
-## [Day 11](https://www.linkedin.com/posts/nathancavaglione_day-1114-cloning-slack-with-claude-code-activity-7436864574370369536-ph9P?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
+# 3. Frontend (in a second terminal)
+cd frontend
+npm install
+npm run dev                      # http://localhost:5173
+```
 
-<img src="images/day_11.png" alt="Day 11" width="800">
+## Deployment
 
-## [Day 10](https://www.linkedin.com/posts/nathancavaglione_day-1014-cloning-slack-with-claude-code-activity-7436479309319475200-W8uQ?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
+- **Frontend:** Vercel (uses `vercel.json`)
+- **Backend:** Railway (uses `backend/railway.json`)
+- **Database:** Neon or Supabase (both free)
 
-<img src="images/day_10.png" alt="Day 10" width="400">
+Set env vars:
 
-## [Day 8+9](https://www.linkedin.com/posts/nathancavaglione_day-914-cloning-slack-with-claude-code-activity-7436051734357221376-p5Qu?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
+- **Vercel:** `VITE_API_URL` → `https://your-backend.up.railway.app`
+- **Railway:** `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN` → `https://your-app.vercel.app`
 
-<img src="images/day_8_and_9.png" alt="Day 8+9" width="800">
+## Attribution
 
-## [Day 7](https://www.linkedin.com/posts/nathancavaglione_day-714-cloning-slack-with-claude-code-ugcPost-7435417548227100674-VZR3?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
-
-<img src="images/day_7.png" alt="Day 7" width="800">
-
-## [Day 6](https://www.linkedin.com/posts/nathancavaglione_day-614-cloning-slack-with-claude-code-activity-7435032144223281153-t1T0?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
-
-![Day 6](images/day6-demo.gif)
-
-## [Day 5](https://www.linkedin.com/posts/nathancavaglione_day-514-cloning-slack-with-claude-code-share-7434705951200272385-wOGI?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
-
-<img src="images/day_5.jpeg" alt="Day 5" width="800">
-
-## [Day 4](https://www.linkedin.com/posts/nathancavaglione_day-414-cloning-slack-with-claude-code-activity-7434330782736928768-1L7h?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
-
-<img src="images/day_4.jpeg" alt="Day 4" width="400">
-
-## [Day 3](https://www.linkedin.com/posts/nathancavaglione_day-314-cloning-slack-with-claude-code-share-7433958640103026689-hdKo?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
-
-![Day 3](images/day_3.gif)
-
-## [Day 2](https://www.linkedin.com/posts/nathancavaglione_day-214-cloning-slack-with-claude-code-activity-7433486444993613824-umUt?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
-
-![Day 2](images/day_2.jpeg)
-
-
-## [Day 1](https://www.linkedin.com/posts/nathancavaglione_slack-charges-8usermonth-for-a-50-person-activity-7433209073036210176-JcWL?utm_source=share&utm_medium=member_desktop&rcm=ACoAABo_DiMBthZ8gqvy6PiOdSHUMuPt9XgMnfY)
-
-![Day 1](images/day_1.jpeg)
+Derived from [ncvgl/slawk](https://github.com/ncvgl/slawk) (MIT). See `LICENSE`.
