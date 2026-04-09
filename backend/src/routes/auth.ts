@@ -11,7 +11,6 @@ import { logError } from '../utils/logger.js';
 import { kickUser } from '../websocket/index.js';
 
 const router = Router();
-const isTest = process.env.NODE_ENV === 'test';
 
 // Strip HTML tags for defense-in-depth
 function stripHtml(str: string): string {
@@ -24,7 +23,6 @@ const registerSchema = z.object({
   name: z.string().min(1).max(100)
     .refine(val => !val.includes('\u0000'), { message: 'Name cannot contain null bytes' })
     .transform(stripHtml),
-  inviteCode: z.string().max(64).optional(),
 });
 
 const loginSchema = z.object({
@@ -42,7 +40,6 @@ const MAX_LOCKOUT_ENTRIES = 10_000;
 setInterval(() => {
   const now = Date.now();
   for (const [email, entry] of loginAttempts) {
-    // Remove expired lockouts and stale attempt counters (no activity within lockout window)
     if (
       (entry.lockedUntil > 0 && entry.lockedUntil < now) ||
       (entry.lockedUntil === 0 && (now - entry.lastAttempt) > LOCKOUT_DURATION_MS)
@@ -52,10 +49,10 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref();
 
-// POST /auth/register
+// POST /auth/register - Open registration
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, name, inviteCode } = registerSchema.parse(req.body);
+    const { email, password, name } = registerSchema.parse(req.body);
 
     const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existingUser) {
@@ -65,74 +62,25 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Require invite code — no open registration (relaxed in test env for convenience)
-    if (!inviteCode && !isTest) {
-      res.status(400).json({ error: 'An invite is required to register' });
-      return;
-    }
-
-    // Pre-validate invite code format (early rejection before hashing)
-    if (inviteCode) {
-      const invite = await prisma.inviteLink.findUnique({ where: { code: inviteCode } });
-      if (!invite) {
-        res.status(400).json({ error: 'Invalid invite code' });
-        return;
-      }
-      if (invite.expiresAt && invite.expiresAt < new Date()) {
-        res.status(400).json({ error: 'Invite code has expired' });
-        return;
-      }
-      if (invite.maxUses !== null && invite.useCount >= invite.maxUses) {
-        res.status(400).json({ error: 'Invite code has reached its usage limit' });
-        return;
-      }
-    }
-
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Use transaction to atomically validate invite + create user + increment useCount
-    const user = await prisma.$transaction(async (tx) => {
-      let assignedRole: 'OWNER' | 'ADMIN' | 'MEMBER' | 'GUEST' = 'MEMBER';
-
-      if (inviteCode) {
-        // Atomic check-and-increment: a single UPDATE with WHERE conditions
-        // eliminates the race window between findUnique and update that existed
-        // under READ COMMITTED isolation (two concurrent registrations could
-        // both read useCount=0 with maxUses=1, both pass the check, both increment).
-        const claimed = await tx.$queryRaw<Array<{ id: number; role: string }>>`
-          UPDATE "InviteLink"
-          SET "useCount" = "useCount" + 1
-          WHERE "code" = ${inviteCode}
-            AND ("expiresAt" IS NULL OR "expiresAt" >= NOW())
-            AND ("maxUses" IS NULL OR "useCount" < "maxUses")
-          RETURNING id, role
-        `;
-        if (claimed.length === 0) {
-          throw new Error('INVITE_INVALID');
-        }
-        // Cap self-service registration to MEMBER/GUEST — OWNER/ADMIN require admin action
-        const inviteRole = claimed[0].role;
-        assignedRole = (inviteRole === 'MEMBER' || inviteRole === 'GUEST') ? inviteRole as 'MEMBER' | 'GUEST' : 'MEMBER';
-      }
-
-      return tx.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          name,
-          role: assignedRole,
-        },
-        select: {
-          id: true,
-          name: true,
-          role: true,
-          createdAt: true,
-        },
-      });
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        role: 'MEMBER',
+      },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        createdAt: true,
+      },
     });
 
-    // Auto-join default channels — guests get NO auto-join (admin assigns channels)
-    const channelsToJoin = user.role === 'GUEST' ? [] : ['general', 'random'];
+    // Auto-join default channels so new users land somewhere
+    const channelsToJoin = ['general', 'random'];
     for (const channelName of channelsToJoin) {
       try {
         let channel = await prisma.channel.findFirst({
@@ -173,14 +121,7 @@ router.post('/register', async (req: Request, res: Response) => {
       res.status(400).json({ error: error.issues });
       return;
     }
-    if (error instanceof Error && error.message === 'INVITE_INVALID') {
-      res.status(400).json({ error: 'Invite code is no longer valid' });
-      return;
-    }
     // Handle unique constraint violation (concurrent registration race).
-    // Return the same status + message as the normal existing-email path
-    // so concurrent requests can't differentiate "email already existed"
-    // (400) from "email just now taken by a racing request" (was 500).
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       res.status(400).json({ error: 'Unable to complete registration' });
       return;
@@ -285,8 +226,7 @@ const changePasswordSchema = z.object({
 });
 
 // Brute-force protection for password change (keyed on userId, not email,
-// since this endpoint is authenticated).  Without this, an attacker with
-// a stolen JWT can dictionary-attack the currentPassword at 120 req/min.
+// since this endpoint is authenticated).
 const passwordChangeAttempts = new Map<number, { count: number; lockedUntil: number; lastAttempt: number }>();
 const MAX_PW_CHANGE_ATTEMPTS = 5;
 const PW_CHANGE_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
@@ -326,7 +266,6 @@ router.post('/change-password', authMiddleware, async (req: AuthRequest, res: Re
 
     const validPassword = await bcrypt.compare(currentPassword, user.password);
     if (!validPassword) {
-      // Track failed attempt
       const now = Date.now();
       const current = passwordChangeAttempts.get(userId) || { count: 0, lockedUntil: 0, lastAttempt: now };
       current.count++;
@@ -340,7 +279,6 @@ router.post('/change-password', authMiddleware, async (req: AuthRequest, res: Re
       return;
     }
 
-    // Clear failed attempts on success
     passwordChangeAttempts.delete(userId);
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -355,12 +293,7 @@ router.post('/change-password', authMiddleware, async (req: AuthRequest, res: Re
       select: { id: true, tokenVersion: true },
     });
 
-    // Invalidate cached auth so the revoked token is rejected immediately
     invalidateTokenCache(userId);
-
-    // Immediately disconnect all WebSocket connections for this user
-    // (don't wait for the 5-minute periodic revalidation — the password
-    // change may be in response to a compromised account)
     kickUser(userId);
 
     // Issue a fresh token with the new tokenVersion
@@ -377,42 +310,6 @@ router.post('/change-password', authMiddleware, async (req: AuthRequest, res: Re
     }
     logError('Change password error', error);
     res.status(500).json({ error: 'Failed to change password' });
-  }
-});
-
-// GET /auth/invite/:code - Validate invite code (public, no auth required)
-router.get('/invite/:code', async (req: Request, res: Response) => {
-  try {
-    const code = req.params.code as string;
-    if (!code || code.length > 64) {
-      res.status(400).json({ error: 'Invalid invite code' });
-      return;
-    }
-
-    const invite = await prisma.inviteLink.findUnique({
-      where: { code },
-      select: { role: true, expiresAt: true, maxUses: true, useCount: true },
-    });
-
-    if (!invite) {
-      res.status(404).json({ error: 'Invite not found' });
-      return;
-    }
-
-    if (invite.expiresAt && invite.expiresAt < new Date()) {
-      res.status(410).json({ error: 'Invite expired' });
-      return;
-    }
-
-    if (invite.maxUses !== null && invite.useCount >= invite.maxUses) {
-      res.status(410).json({ error: 'Invite exhausted' });
-      return;
-    }
-
-    res.json({ valid: true, role: invite.role });
-  } catch (error) {
-    logError('Validate invite error', error);
-    res.status(500).json({ error: 'Failed to validate invite' });
   }
 });
 

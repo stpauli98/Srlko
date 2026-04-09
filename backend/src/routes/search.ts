@@ -133,7 +133,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         createdAt: m.createdAt,
         user: m.user,
         channel: m.channel,
-        threadId: m.threadId,
         _score: score,
       };
     });

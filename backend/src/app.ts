@@ -4,7 +4,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
-import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -12,41 +11,41 @@ dotenv.config();
 import authRoutes from './routes/auth.js';
 import channelRoutes from './routes/channels.js';
 import messageRoutes from './routes/messages.js';
-import threadRoutes from './routes/threads.js';
 import searchRoutes from './routes/search.js';
 import reactionRoutes from './routes/reactions.js';
-import fileRoutes from './routes/files.js';
 import userRoutes from './routes/users.js';
 import dmRoutes from './routes/dms.js';
-import bookmarkRoutes from './routes/bookmarks.js';
-import webhookRoutes from './routes/webhooks.js';
 import unreadRoutes from './routes/unreads.js';
-import scheduledMessageRoutes from './routes/scheduled-messages.js';
-import adminRoutes from './routes/admin.js';
-import pushRoutes from './routes/push.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { authMiddleware } from './middleware/auth.js';
 import { JWT_SECRET } from './config.js';
 
 const app = express();
 
-// Trust first proxy (e.g. Cloud Run, nginx) for correct rate-limit keying
+// Trust first proxy (Railway / nginx) for correct rate-limit keying
 app.set('trust proxy', 1);
 
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      'img-src': ["'self'", 'blob:', ...(process.env.NODE_ENV !== 'production' ? ['https://randomuser.me'] : []), ...(process.env.GCS_BUCKET_NAME ? [`https://storage.googleapis.com/${process.env.GCS_BUCKET_NAME}`] : [])],
+      'img-src': ["'self'", 'blob:', 'data:', 'https:'],
       'connect-src': ["'self'", 'wss:', 'ws:'],
-      'media-src': ["'self'", 'blob:', ...(process.env.GCS_BUCKET_NAME ? [`https://storage.googleapis.com/${process.env.GCS_BUCKET_NAME}`] : [])],
+      'media-src': ["'self'", 'blob:'],
     },
   },
   crossOriginEmbedderPolicy: 'credentialless' as any,
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
 }));
-const corsOrigin = process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : 'http://localhost:5173');
-app.use(cors({ origin: corsOrigin as string | boolean }));
+
+// CORS: allow a single origin in production, comma-separated list for multi-origin,
+// or default to Vite dev server in development.
+function parseCorsOrigin(): string | boolean | string[] {
+  const raw = process.env.CORS_ORIGIN;
+  if (!raw) return process.env.NODE_ENV === 'production' ? false : 'http://localhost:5173';
+  if (raw.includes(',')) return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return raw;
+}
+app.use(cors({ origin: parseCorsOrigin() as any, credentials: false }));
 app.use(compression());
 app.use(express.json({ limit: '100kb' }));
 
@@ -87,69 +86,27 @@ const apiLimiter = isTest
 // Cache-Control: no-store for all API responses
 app.use((req, res, next) => {
   if (req.path.startsWith('/auth') || req.path.startsWith('/channels') || req.path.startsWith('/messages') ||
-      req.path.startsWith('/files') || req.path.startsWith('/users') || req.path.startsWith('/dms') ||
-      req.path.startsWith('/search') || req.path.startsWith('/bookmarks') || req.path.startsWith('/admin') ||
-      req.path.startsWith('/push')) {
+      req.path.startsWith('/users') || req.path.startsWith('/dms') || req.path.startsWith('/search') ||
+      req.path.startsWith('/unreads')) {
     res.setHeader('Cache-Control', 'no-store');
   }
   next();
 });
 
-// Note: /uploads is NOT served via express.static to prevent unauthenticated access.
-// Files are served through the authenticated GET /files/:id/download endpoint.
-
-// In production, intercept browser navigations (Accept: text/html) for SPA routes
-// that collide with API routes (e.g. /files, /admin) and serve index.html
-if (process.env.NODE_ENV === 'production') {
-  const spaRoutes = ['/files', '/admin', '/dms'];
-  const frontendDist = path.join(process.cwd(), 'public');
-  app.use(spaRoutes, (req, res, next) => {
-    // Skip API calls: they carry Authorization or explicitly request JSON
-    const isApiCall = req.headers.authorization || req.headers.accept === 'application/json';
-    if (!isApiCall && req.method === 'GET' && req.accepts('html') && !req.path.includes('.')) {
-      // Only for top-level navigation (no sub-paths like /files/:id/download)
-      if (req.originalUrl === req.baseUrl || req.originalUrl === req.baseUrl + '/') {
-        res.setHeader('Cache-Control', 'no-cache');
-        res.sendFile(path.join(frontendDist, 'index.html'));
-        return;
-      }
-    }
-    next();
-  });
-}
-
 // Routes
 app.use('/auth', authLimiter, authRoutes);
 app.use('/channels', apiLimiter, channelRoutes);
 app.use('/channels', apiLimiter, messageRoutes);
-app.use('/messages', apiLimiter, threadRoutes);
 app.use('/messages', apiLimiter, reactionRoutes);
 app.use('/search', apiLimiter, searchRoutes);
-app.use('/files', apiLimiter, fileRoutes);
 app.use('/users', apiLimiter, userRoutes);
 app.use('/dms', apiLimiter, dmRoutes);
-app.use('/messages', apiLimiter, bookmarkRoutes);
-app.use('/bookmarks', apiLimiter, bookmarkRoutes);
-app.use('/webhooks', apiLimiter, webhookRoutes);
 app.use('/unreads', apiLimiter, unreadRoutes);
-app.use('/messages', apiLimiter, scheduledMessageRoutes);
-app.use('/admin', apiLimiter, adminRoutes);
-app.use('/push', apiLimiter, pushRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
-
-// Serve frontend in production
-if (process.env.NODE_ENV === 'production') {
-  const frontendDist = path.join(process.cwd(), 'public');
-  app.use(express.static(frontendDist, { dotfiles: 'deny' }));
-  app.get('/{*splat}', (req, res) => {
-    res.setHeader('Cache-Control', 'no-cache');
-    res.sendFile(path.join(frontendDist, 'index.html'));
-  });
-}
 
 // Error handler
 app.use(errorHandler);

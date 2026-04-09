@@ -6,10 +6,9 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireChannelMembership, requirePublicChannelReadAccess } from '../middleware/authorize.js';
 import { AuthRequest } from '../types.js';
 import { isUserOnline, getIO } from '../websocket/index.js';
-import { USER_SELECT_BASIC, USER_SELECT_FULL, MESSAGE_INCLUDE_FULL } from '../db/selects.js';
+import { USER_SELECT_FULL } from '../db/selects.js';
 import { parseIntParam } from '../utils/params.js';
 import { logError } from '../utils/logger.js';
-import { writeAuditLog } from '../utils/auditLog.js';
 
 const router = Router();
 
@@ -131,7 +130,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             JOIN "ChannelMember" cm ON cm."channelId" = m."channelId" AND cm."userId" = ${userId}
             LEFT JOIN "ChannelRead" cr ON cr."channelId" = m."channelId" AND cr."userId" = ${userId}
             WHERE m."channelId" = ANY(${channelIds})
-              AND m."threadId" IS NULL
               AND m."deletedAt" IS NULL
               AND (cr."lastReadMessageId" IS NULL OR m.id > cr."lastReadMessageId")
             GROUP BY m."channelId"
@@ -640,22 +638,6 @@ router.delete('/:id/members/:userId', authMiddleware, requireChannelMembership, 
       io.in(`user:${targetUserId}`).socketsLeave(`channel:${channelId}`);
     }
 
-    // Get target user name for audit log
-    const targetUser = await prisma.user.findUnique({
-      where: { id: targetUserId },
-      select: { name: true },
-    });
-
-    // Write audit log (fire-and-forget, non-blocking)
-    writeAuditLog({
-      action: 'channel.member_removed',
-      actorId,
-      targetType: 'channel',
-      targetId: channelId,
-      targetName: channel.name,
-      details: `Removed user: ${targetUser?.name || targetUserId}`,
-    });
-
     res.json({ message: 'Member removed successfully' });
   } catch (error) {
     logError('Remove member error', error);
@@ -730,7 +712,7 @@ router.post('/:id/read/baseline', authMiddleware, requireChannelMembership, asyn
 
     // No record yet — find the latest message to use as the baseline
     const latestMessage = await prisma.message.findFirst({
-      where: { channelId, threadId: null, deletedAt: null },
+      where: { channelId, deletedAt: null },
       orderBy: { id: 'desc' },
       select: { id: true },
     });
@@ -770,7 +752,6 @@ router.post('/:id/unread', authMiddleware, requireChannelMembership, async (req:
     const previousMessage = await prisma.message.findFirst({
       where: {
         channelId,
-        threadId: null,
         deletedAt: null,
         id: { lt: messageId },
       },
@@ -793,54 +774,6 @@ router.post('/:id/unread', authMiddleware, requireChannelMembership, async (req:
     }
     logError('Mark channel unread error', error);
     res.status(500).json({ error: 'Failed to mark channel as unread' });
-  }
-});
-
-// GET /channels/:id/files - Get files uploaded in channel
-router.get('/:id/files', authMiddleware, requirePublicChannelReadAccess, async (req: AuthRequest, res: Response) => {
-  try {
-    const channelId = req.channelId!;
-
-    const files = await prisma.file.findMany({
-      where: {
-        message: { channelId, deletedAt: null },
-      },
-      select: {
-        id: true,
-        filename: true,
-        originalName: true,
-        mimetype: true,
-        size: true,
-        url: true,
-        userId: true,
-        createdAt: true,
-        user: { select: { id: true, name: true, avatar: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    res.json(files);
-  } catch (error) {
-    logError('Get channel files error', error);
-    res.status(500).json({ error: 'Failed to get channel files' });
-  }
-});
-
-// GET /channels/:id/pins - Get pinned messages
-router.get('/:id/pins', authMiddleware, requirePublicChannelReadAccess, async (req: AuthRequest, res: Response) => {
-  try {
-    const channelId = req.channelId!;
-
-    const pins = await prisma.message.findMany({
-      where: { channelId, isPinned: true, deletedAt: null },
-      include: MESSAGE_INCLUDE_FULL,
-      orderBy: { pinnedAt: 'desc' },
-    });
-
-    res.json(pins);
-  } catch (error) {
-    logError('Get pinned messages error', error);
-    res.status(500).json({ error: 'Failed to get pinned messages' });
   }
 });
 

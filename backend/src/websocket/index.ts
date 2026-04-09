@@ -14,10 +14,9 @@ import {
   wsUserIdSchema,
 } from '../middleware/authorize.js';
 // Huddle schemas imported by huddles.ts directly
-import { USER_SELECT_BASIC, MESSAGE_INCLUDE_WITH_FILES, MESSAGE_INCLUDE_FULL, DM_INCLUDE_USERS } from '../db/selects.js';
+import { USER_SELECT_BASIC, MESSAGE_INCLUDE_FULL, DM_INCLUDE_USERS } from '../db/selects.js';
 import { logError } from '../utils/logger.js';
 import { registerHuddleHandlers, handleHuddleDisconnect } from './huddles.js';
-import { sendPushToUser } from '../services/pushService.js';
 
 interface AuthenticatedSocket extends Socket {
   user?: JwtPayload;
@@ -346,43 +345,17 @@ export function initializeWebSocket(httpServer: HttpServer) {
           return;
         }
 
-        // Validate threadId belongs to the same channel and is not deleted
-        if (data.threadId) {
-          const parentMessage = await prisma.message.findUnique({
-            where: { id: data.threadId },
-          });
-          if (!parentMessage || parentMessage.deletedAt || parentMessage.channelId !== data.channelId) {
-            sendError('Thread parent must belong to the same channel');
-            return;
-          }
-        }
+        const created = await prisma.message.create({
+          data: {
+            content: data.content,
+            userId: socket.user!.userId,
+            channelId: data.channelId,
+          },
+        });
 
-        // Create message and atomically attach files in a transaction
-        const finalMessage = await prisma.$transaction(async (tx) => {
-          const msg = await tx.message.create({
-            data: {
-              content: data.content,
-              userId: socket.user!.userId,
-              channelId: data.channelId,
-              threadId: data.threadId,
-            },
-          });
-
-          // Attach files atomically — validates ownership and unattached status
-          if (data.fileIds && data.fileIds.length > 0) {
-            const updated = await tx.file.updateMany({
-              where: { id: { in: data.fileIds }, userId: socket.user!.userId, messageId: null, dmId: null },
-              data: { messageId: msg.id },
-            });
-            if (updated.count !== data.fileIds.length) {
-              throw new Error('Invalid file IDs or files already attached');
-            }
-          }
-
-          return tx.message.findUnique({
-            where: { id: msg.id },
-            include: MESSAGE_INCLUDE_FULL,
-          });
+        const finalMessage = await prisma.message.findUnique({
+          where: { id: created.id },
+          include: MESSAGE_INCLUDE_FULL,
         });
 
         // Always emit to the sender so they see their own message immediately,
@@ -393,32 +366,6 @@ export function initializeWebSocket(httpServer: HttpServer) {
 
         // Ack success to the sender
         if (typeof ack === 'function') ack({});
-
-        // Fire push notifications (fire-and-forget)
-        if (finalMessage && !data.threadId) {
-          const channelInfo = await prisma.channel.findUnique({
-            where: { id: data.channelId },
-            select: { name: true },
-          });
-          const senderName = finalMessage.user?.name || 'Someone';
-          const channelName = channelInfo?.name || 'channel';
-          const body = `${senderName}: ${finalMessage.content.slice(0, 100) || 'Sent an attachment'}`;
-
-          prisma.channelMember.findMany({
-            where: { channelId: data.channelId },
-            select: { userId: true },
-          }).then((members) => {
-            for (const member of members) {
-              if (member.userId === socket.user!.userId) continue;
-              if (isUserOnline(member.userId)) continue;
-              sendPushToUser(member.userId, {
-                title: `#${channelName}`,
-                body,
-                url: `/c/${data.channelId}`,
-              }).catch((err) => logError('Push notification dispatch failed', err));
-            }
-          }).catch((err) => logError('Push notification dispatch failed', err));
-        }
       } catch (error) {
         logError('WebSocket message error', error);
         sendError('Failed to send message');
@@ -530,21 +477,13 @@ export function initializeWebSocket(httpServer: HttpServer) {
           return;
         }
 
-        // Soft-delete message and detach its files so they don't become orphaned
-        await prisma.$transaction([
-          prisma.message.update({
-            where: { id: data.messageId },
-            data: { deletedAt: new Date() },
-          }),
-          prisma.file.updateMany({
-            where: { messageId: data.messageId },
-            data: { messageId: null },
-          }),
-        ]);
+        await prisma.message.update({
+          where: { id: data.messageId },
+          data: { deletedAt: new Date() },
+        });
 
         io.to(`channel:${message.channelId}`).emit('message:deleted', {
           messageId: data.messageId,
-          threadId: message.threadId ?? null,
           channelId: message.channelId,
         });
       } catch (error) {
@@ -705,16 +644,6 @@ export function initializeWebSocket(httpServer: HttpServer) {
         io.to(`user:${socket.user.userId}`).emit('dm:new', dm);
         if (!isSelfDM) {
           io.to(`user:${data.toUserId}`).emit('dm:new', dm);
-
-          // Fire push notification for DM (fire-and-forget)
-          if (!isUserOnline(data.toUserId)) {
-            const senderName = dm.fromUser?.name || 'Someone';
-            sendPushToUser(data.toUserId, {
-              title: senderName,
-              body: dm.content.slice(0, 100) || 'Sent an attachment',
-              url: `/d/${socket.user.userId}`,
-            }).catch((err) => logError('Push notification dispatch failed', err));
-          }
         }
       } catch (error) {
         logError('WebSocket DM error', error);

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { AuthRequest } from '../types.js';
-import { USER_SELECT_BASIC, FILE_SELECT } from '../db/selects.js';
+import { USER_SELECT_BASIC } from '../db/selects.js';
 import { parsePagination, paginateResults } from '../utils/pagination.js';
 import { logError } from '../utils/logger.js';
 
@@ -43,7 +43,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       lastReadMap.set(cr.channelId, cr.lastReadMessageId);
     }
 
-    // For channels without a ChannelRead record, all messages are unread (lastReadMessageId = null)
+    // For channels without a ChannelRead record, all messages are unread
     for (const channelId of memberChannelIds) {
       if (!lastReadMap.has(channelId)) {
         lastReadMap.set(channelId, null);
@@ -51,14 +51,11 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
 
     // Build WHERE conditions for unread messages
-    // For each channel, we need: (channelId = X AND (lastReadMessageId IS NULL OR id > lastReadMessageId))
     const channelConditions = memberChannelIds.map(channelId => {
       const lastReadMessageId = lastReadMap.get(channelId);
       if (lastReadMessageId === null || lastReadMessageId === undefined) {
-        // All messages in this channel are unread
         return { channelId };
       } else {
-        // Only messages with id > lastReadMessageId are unread
         return {
           channelId,
           id: { gt: lastReadMessageId },
@@ -70,12 +67,10 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const messages = await prisma.message.findMany({
       where: {
         OR: channelConditions,
-        threadId: null, // Only top-level messages
-        deletedAt: null, // Exclude deleted messages
+        deletedAt: null,
       },
       include: {
         user: { select: USER_SELECT_BASIC },
-        files: { select: FILE_SELECT },
         channel: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },

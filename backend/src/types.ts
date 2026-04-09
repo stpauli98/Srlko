@@ -11,10 +11,7 @@ export interface JwtPayload {
 export interface AuthRequest extends Request {
   user?: JwtPayload;
   channelId?: number;
-  // These use `any` because `file` conflicts with Express/multer's Request.file type.
-  // The middleware (authorize.ts) attaches Prisma model instances at runtime.
   isChannelMember?: boolean;
   message?: any;
-  file?: any;
   dm?: any;
 }
