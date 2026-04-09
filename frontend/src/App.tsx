@@ -4,9 +4,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { useChannelStore } from '@/stores/useChannelStore';
 import { useMessageStore } from '@/stores/useMessageStore';
 import { useDMStore } from '@/stores/useDMStore';
-import { useBookmarkStore } from '@/stores/useBookmarkStore';
 import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket';
-import { useNotificationStore } from '@/stores/useNotificationStore';
 import { useHuddleStore, setHuddleUserId } from '@/stores/useHuddleStore';
 import { useConnectionStore } from '@/stores/useConnectionStore';
 import { HuddleBar } from '@/components/Huddle/HuddleBar';
@@ -45,8 +43,8 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 /**
  * Syncs URL params to the channel store.
- * - /channels/:channelId  → sets activeChannelId
- * - /dm/:userId           → sets activeDMId
+ * - /c/:channelId  → sets activeChannelId
+ * - /d/:userId     → sets activeDMId
  */
 function RouteSync() {
   const { channelId, userId } = useParams<{ channelId?: string; userId?: string }>();
@@ -56,14 +54,12 @@ function RouteSync() {
   const setActiveDM = useChannelStore((s) => s.setActiveDM);
   const channels = useChannelStore((s) => s.channels);
 
-  // Re-run when channels finish loading so we can validate the channel exists
   const channelsLoaded = channels.length > 0;
 
   useEffect(() => {
     if (channelId) {
       const id = parseInt(channelId, 10);
       if (isNaN(id) || id <= 0) return;
-      // Verify channel exists (non-member public channels are allowed in read-only mode)
       const allChannels = useChannelStore.getState().channels;
       if (allChannels.length > 0 && !allChannels.find((ch) => ch.id === id)) {
         navigate('/', { replace: true });
@@ -85,24 +81,6 @@ function RouteSync() {
   return null;
 }
 
-/**
- * Clears active channel/DM when navigating to /files so MessageArea
- * knows to render the full-page files view.
- */
-function FileRouteSync() {
-  useEffect(() => {
-    useChannelStore.setState({ activeChannelId: null, activeDMId: null });
-  }, []);
-  return null;
-}
-
-function LaterRouteSync() {
-  useEffect(() => {
-    useChannelStore.setState({ activeChannelId: null, activeDMId: null });
-  }, []);
-  return null;
-}
-
 function UnreadsRouteSync() {
   useEffect(() => {
     useChannelStore.setState({ activeChannelId: null, activeDMId: null });
@@ -110,32 +88,8 @@ function UnreadsRouteSync() {
   return null;
 }
 
-function AdminRouteSync() {
-  useEffect(() => {
-    useChannelStore.setState({ activeChannelId: null, activeDMId: null });
-  }, []);
-  return null;
-}
-
-function AdminGuard({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((s) => s.user);
-  const isHydrating = useAuthStore((s) => s.isHydrating);
-  const navigate = useNavigate();
-
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'OWNER';
-
-  useEffect(() => {
-    if (!isHydrating && user && !isAdmin) {
-      navigate('/', { replace: true });
-    }
-  }, [user, isHydrating, isAdmin, navigate]);
-
-  if (isHydrating || !user || !isAdmin) return null;
-  return <>{children}</>;
-}
-
 /**
- * Redirects / to /channels/:id for the first available member channel.
+ * Redirects / to /c/:id for the first available member channel.
  */
 function DefaultRedirect() {
   const channels = useChannelStore((s) => s.channels);
@@ -165,7 +119,6 @@ function useFocusTracking() {
     const viewType = activeChannelId ? 'channel' : activeDMId ? 'dm' : 'none';
     const viewId = activeChannelId || activeDMId || null;
 
-    // Only emit if view actually changed
     if (prevViewRef.current.type === viewType && prevViewRef.current.id === viewId) return;
     prevViewRef.current = { type: viewType, id: viewId };
 
@@ -178,7 +131,7 @@ function useFocusTracking() {
     }
   }, [activeChannelId, activeDMId]);
 
-  // Track tab visibility — emit focus:none when hidden, restore when visible
+  // Track tab visibility
   useEffect(() => {
     const handleVisibility = () => {
       const socket = getSocket();
@@ -207,22 +160,13 @@ function AppShell() {
   const joinedChannelsRef = useRef<Set<number>>(new Set());
 
   const fetchDirectMessages = useChannelStore((s) => s.fetchDirectMessages);
-  const loadBookmarks = useBookmarkStore((s) => s.load);
 
-  // Track which channel/DM the user is viewing for smart push notifications
   useFocusTracking();
 
   useEffect(() => {
     fetchChannels();
     fetchDirectMessages();
-    loadBookmarks();
-
-    // Auto-request push notification permission on first load
-    const { permission, isSubscribed, subscribe } = useNotificationStore.getState();
-    if (permission !== 'unsupported' && permission !== 'denied' && !isSubscribed) {
-      subscribe();
-    }
-  }, [fetchChannels, fetchDirectMessages, loadBookmarks]);
+  }, [fetchChannels, fetchDirectMessages]);
 
   // Connect socket and set up event listeners
   useEffect(() => {
@@ -232,39 +176,21 @@ function AppShell() {
       return;
     }
 
-    // Set user ID for huddle store
     const currentUserId = useAuthStore.getState().user?.id;
     if (currentUserId) setHuddleUserId(currentUserId);
 
-    // Mark self as online as soon as socket connects (fixes race with hydrate/getMyProfile)
     const handleConnect = () => {
       useAuthStore.getState().updateUser({ status: 'online' });
       useConnectionStore.getState().setConnected(true);
     };
-    // If already connected (reconnect scenario), update immediately
     if (socket.connected) handleConnect();
 
     const handleNewMessage = (msg: import('@/lib/api').ApiMessage) => {
       const { onMessageNew } = useMessageStore.getState();
       const { activeChannelId, incrementUnread } = useChannelStore.getState();
       onMessageNew(msg);
-      // If the message is for a channel we're not viewing, increment unread
       if (msg.channelId !== activeChannelId) {
         incrementUnread(msg.channelId);
-        // Show desktop notification when tab is hidden (visible tab uses in-app unread indicators)
-        if (document.hidden && msg.user?.id !== currentUserId && Notification.permission === 'granted' && navigator.serviceWorker?.controller) {
-          const channelName = useChannelStore.getState().channels.find(c => c.id === msg.channelId)?.name;
-          if (channelName) {
-            navigator.serviceWorker.ready.then((reg) => {
-              reg.showNotification(`#${channelName}`, {
-                body: `${msg.user?.name || 'Someone'}: ${(msg.content || '').slice(0, 100)}`,
-                icon: '/favicon-192.png',
-                badge: '/favicon-192.png',
-                data: { url: `/c/${msg.channelId}` },
-              });
-            }).catch(() => {});
-          }
-        }
       }
     };
 
@@ -280,9 +206,7 @@ function AppShell() {
       const { addOrUpdateDM, activeDMId, incrementDMUnread } = useChannelStore.getState();
       const currentUser = useAuthStore.getState().user;
       if (!currentUser) return;
-      // Validate DM involves the current user
       if (dm.fromUserId !== currentUser.id && dm.toUserId !== currentUser.id) return;
-      // Validate required fields
       if (typeof dm.fromUser?.id !== 'number' || typeof dm.toUser?.id !== 'number') return;
       if (typeof dm.fromUser?.name !== 'string' || typeof dm.toUser?.name !== 'string') return;
       const isSelfDM = dm.fromUserId === currentUser.id && dm.toUserId === currentUser.id;
@@ -294,19 +218,7 @@ function AppShell() {
       }
       if (activeDMId !== otherUserId && !isSelfDM) {
         incrementDMUnread(otherUserId);
-        // Show desktop notification when tab is hidden (visible tab uses in-app unread indicators)
-        if (document.hidden && !isFromMe && Notification.permission === 'granted' && navigator.serviceWorker?.controller) {
-          navigator.serviceWorker.ready.then((reg) => {
-            reg.showNotification(otherUser.name, {
-              body: (dm.content || '').slice(0, 100) || 'Sent an attachment',
-              icon: '/favicon-192.png',
-              badge: '/favicon-192.png',
-              data: { url: `/d/${otherUserId}` },
-            });
-          }).catch(() => {});
-        }
       }
-      // Add message to DM store if conversation is loaded
       useDMStore.getState().addIncomingMessage(dm, currentUser.id);
     };
 
@@ -322,28 +234,6 @@ function AppShell() {
       useDMStore.getState().onDMDeleted(data, currentUser.id);
     };
 
-    const handleDMReply = (reply: import('@/lib/api').ApiDirectMessage & { threadId: number }) => {
-      const currentUser = useAuthStore.getState().user;
-      if (!currentUser || !reply.threadId) return;
-      // Skip for sender — their reply count is already updated via the REST response path
-      if (reply.fromUserId === currentUser.id) return;
-      const otherUserId = reply.fromUserId;
-      const participant = { id: reply.fromUser.id, name: reply.fromUser.name, avatar: reply.fromUser.avatar ?? null };
-      useDMStore.getState().incrementReplyCount(reply.threadId, otherUserId, participant);
-      // Show desktop notification for DM thread replies when tab is hidden
-      const { activeDMId } = useChannelStore.getState();
-      if (document.hidden && activeDMId !== otherUserId && Notification.permission === 'granted' && navigator.serviceWorker?.controller) {
-        navigator.serviceWorker.ready.then((reg) => {
-          reg.showNotification(`${reply.fromUser.name} (thread)`, {
-            body: (reply.content || '').slice(0, 100) || 'Sent an attachment',
-            icon: '/favicon-192.png',
-            badge: '/favicon-192.png',
-            data: { url: `/d/${otherUserId}` },
-          });
-        }).catch(() => {});
-      }
-    };
-
     const handleDMReactionAdded = (data: { dmId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => {
       useDMStore.getState().onReactionAdded(data);
     };
@@ -355,7 +245,6 @@ function AppShell() {
     const handlePresenceUpdate = (data: { userId: number; status: string }) => {
       const { updateDMStatus } = useChannelStore.getState();
       updateDMStatus(data.userId, data.status as import('@/lib/types').DirectMessage['userStatus']);
-      // Also update own status in auth store when server confirms our presence
       const currentUser = useAuthStore.getState().user;
       if (currentUser && data.userId === currentUser.id) {
         useAuthStore.getState().updateUser({ status: data.status as any });
@@ -371,14 +260,11 @@ function AppShell() {
     };
 
     const handleChannelJoined = () => {
-      // Re-fetch channels so the new channel appears in the sidebar
       useChannelStore.getState().fetchChannels();
     };
 
     const handleChannelDeleted = (data: { channelId: number }) => {
-      // Re-fetch channels to remove the deleted channel from sidebar
       useChannelStore.getState().fetchChannels();
-      // Clear cached messages for the deleted channel so stale data doesn't re-appear
       const msgStore = useMessageStore.getState();
       if (msgStore.loadedChannelId === data.channelId) {
         useMessageStore.setState({ messages: [], loadedChannelId: null });
@@ -387,18 +273,6 @@ function AppShell() {
       if (activeChannelId === data.channelId) {
         useChannelStore.setState({ activeChannelId: null });
       }
-    };
-
-    const handleChannelArchived = (data: { channelId: number }) => {
-      useChannelStore.getState().fetchChannels();
-      const { activeChannelId } = useChannelStore.getState();
-      if (activeChannelId === data.channelId) {
-        useChannelStore.setState({ activeChannelId: null });
-      }
-    };
-
-    const handleChannelUnarchived = () => {
-      useChannelStore.getState().fetchChannels();
     };
 
     const handleReactionAdded = (data: { messageId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => {
@@ -416,7 +290,6 @@ function AppShell() {
     socket.on('dm:new', handleNewDM);
     socket.on('dm:updated', handleDMUpdated);
     socket.on('dm:deleted', handleDMDeleted);
-    socket.on('dm:reply', handleDMReply);
     socket.on('dm:reaction:added', handleDMReactionAdded);
     socket.on('dm:reaction:removed', handleDMReactionRemoved);
     socket.on('presence:update', handlePresenceUpdate);
@@ -424,8 +297,6 @@ function AppShell() {
     socket.on('channel:member-left', handleMemberLeft);
     socket.on('channel:joined', handleChannelJoined);
     socket.on('channel:deleted', handleChannelDeleted);
-    socket.on('channel:archived', handleChannelArchived);
-    socket.on('channel:unarchived', handleChannelUnarchived);
     socket.on('reaction:added', handleReactionAdded);
     socket.on('reaction:removed', handleReactionRemoved);
 
@@ -472,7 +343,6 @@ function AppShell() {
       socket.off('dm:new', handleNewDM);
       socket.off('dm:updated', handleDMUpdated);
       socket.off('dm:deleted', handleDMDeleted);
-      socket.off('dm:reply', handleDMReply);
       socket.off('dm:reaction:added', handleDMReactionAdded);
       socket.off('dm:reaction:removed', handleDMReactionRemoved);
       socket.off('presence:update', handlePresenceUpdate);
@@ -480,8 +350,6 @@ function AppShell() {
       socket.off('channel:member-left', handleMemberLeft);
       socket.off('channel:joined', handleChannelJoined);
       socket.off('channel:deleted', handleChannelDeleted);
-      socket.off('channel:archived', handleChannelArchived);
-      socket.off('channel:unarchived', handleChannelUnarchived);
       socket.off('reaction:added', handleReactionAdded);
       socket.off('reaction:removed', handleReactionRemoved);
       socket.off('huddle:invite:sent', handleInviteSent);
@@ -515,7 +383,6 @@ function AppShell() {
     if (socket.connected) {
       joinChannels();
     }
-    // Also join when socket reconnects
     socket.on('connect', joinChannels);
     return () => {
       socket.off('connect', joinChannels);
@@ -569,10 +436,7 @@ function App() {
           <Route index element={<DefaultRedirect />} />
           <Route path="c/:channelId" element={<RouteSync />} />
           <Route path="d/:userId" element={<RouteSync />} />
-          <Route path="files" element={<FileRouteSync />} />
           <Route path="unreads" element={<UnreadsRouteSync />} />
-          <Route path="later" element={<LaterRouteSync />} />
-          <Route path="admin" element={<AdminGuard><AdminRouteSync /></AdminGuard>} />
           <Route path="*" element={<DefaultRedirect />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

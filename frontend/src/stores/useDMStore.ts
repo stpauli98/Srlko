@@ -3,15 +3,6 @@ import { getConversation, sendDM, editDM, deleteDM, addDMReaction, removeDMReact
 import { useAuthStore } from './useAuthStore';
 import type { Reaction } from '@/lib/types';
 
-export interface DMFile {
-  id: number;
-  filename: string;
-  originalName: string;
-  mimetype: string;
-  size: number;
-  url: string;
-}
-
 export interface DMMessage {
   id: number;
   content: string;
@@ -19,12 +10,7 @@ export interface DMMessage {
   fromUser: { id: number; name: string; avatar?: string | null };
   createdAt: Date;
   editedAt?: Date | null;
-  threadId?: number | null;
-  isPinned?: boolean;
-  replyCount: number;
-  threadParticipants: { id: number; name: string; avatar: string | null }[];
   reactions: Reaction[];
-  files: DMFile[];
 }
 
 function groupReactions(apiReactions?: ApiDMReaction[]): Reaction[] {
@@ -51,19 +37,7 @@ function transformDM(dm: ApiDirectMessage): DMMessage {
     fromUser: dm.fromUser,
     createdAt: new Date(dm.createdAt),
     editedAt: dm.editedAt ? new Date(dm.editedAt) : null,
-    threadId: dm.threadId ?? null,
-    isPinned: dm.isPinned ?? false,
-    replyCount: dm._count?.replies ?? 0,
-    threadParticipants: dm.threadParticipants ?? [],
     reactions: groupReactions(dm.reactions),
-    files: (dm.files ?? []).map((f: any) => ({
-      id: f.id,
-      filename: f.filename,
-      originalName: f.originalName ?? f.filename,
-      mimetype: f.mimetype,
-      size: f.size,
-      url: f.url,
-    })),
   };
 }
 
@@ -76,7 +50,7 @@ interface DMState {
   sendError: string | null;
 
   fetchConversation: (userId: number, around?: number) => Promise<void>;
-  sendMessage: (userId: number, content: string, fileIds?: number[]) => Promise<void>;
+  sendMessage: (userId: number, content: string) => Promise<void>;
   editMessage: (messageId: number, content: string, userId: number) => Promise<void>;
   deleteMessage: (messageId: number, userId: number) => Promise<void>;
   addIncomingMessage: (dm: ApiDirectMessage, currentUserId: number) => void;
@@ -86,8 +60,6 @@ interface DMState {
   removeReaction: (dmId: number, emoji: string, conversationUserId: number) => void;
   onReactionAdded: (data: { dmId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => void;
   onReactionRemoved: (data: { dmId: number; emoji: string; userId: number }) => void;
-  updateReplyCount: (messageId: number, userId: number, count: number, participant?: { id: number; name: string; avatar: string | null }) => void;
-  incrementReplyCount: (messageId: number, userId: number, participant?: { id: number; name: string; avatar: string | null }) => void;
   clearConversation: (userId: number) => void;
   clearSendError: () => void;
 }
@@ -104,10 +76,9 @@ export const useDMStore = create<DMState>((set, get) => ({
     set({ isLoading: true, loadError: null, loadingUserId: userId });
     try {
       const data = await getConversation(userId, undefined, around);
-      // Discard stale response if user already switched to another conversation
       if (get().loadingUserId !== userId) return;
       const msgs = data.messages.map(transformDM);
-      if (!around) msgs.reverse(); // API returns DESC, we want ASC (around returns chronological)
+      if (!around) msgs.reverse();
       set((state) => ({
         messages: { ...state.messages, [userId]: msgs },
         isLoading: false,
@@ -119,15 +90,13 @@ export const useDMStore = create<DMState>((set, get) => ({
     }
   },
 
-  sendMessage: async (userId: number, content: string, fileIds?: number[]) => {
+  sendMessage: async (userId: number, content: string) => {
     set({ isSending: true, sendError: null });
     try {
-      const dm = await sendDM(userId, content, fileIds);
+      const dm = await sendDM(userId, content);
       const message = transformDM(dm);
       set((state) => {
         const existing = state.messages[userId] ?? [];
-        // Dedup: the REST broadcast (io.to) may have already delivered this
-        // via the dm:new WebSocket event before the HTTP response arrived
         if (existing.some((m) => m.id === message.id)) {
           return { isSending: false };
         }
@@ -179,27 +148,11 @@ export const useDMStore = create<DMState>((set, get) => ({
 
   clearSendError: () => set({ sendError: null }),
 
-  updateReplyCount: (messageId: number, userId: number, count: number, participant?: { id: number; name: string; avatar: string | null }) => {
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [userId]: (state.messages[userId] ?? []).map((m) => {
-          if (m.id !== messageId) return m;
-          const updatedParticipants = participant && !m.threadParticipants.some((p) => p.id === participant.id)
-            ? [...m.threadParticipants, participant]
-            : m.threadParticipants;
-          return { ...m, replyCount: count, threadParticipants: updatedParticipants };
-        }),
-      },
-    }));
-  },
-
   addReaction: async (dmId: number, emoji: string, conversationUserId: number) => {
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) return;
     const userId = currentUser.id;
 
-    // Optimistic update
     set((state) => ({
       messages: {
         ...state.messages,
@@ -218,7 +171,6 @@ export const useDMStore = create<DMState>((set, get) => ({
     try {
       await addDMReaction(dmId, emoji);
     } catch {
-      // Revert on failure by refetching
       get().fetchConversation(conversationUserId);
     }
   },
@@ -228,7 +180,6 @@ export const useDMStore = create<DMState>((set, get) => ({
     if (!currentUser) return;
     const userId = currentUser.id;
 
-    // Optimistic update
     set((state) => ({
       messages: {
         ...state.messages,
@@ -256,17 +207,14 @@ export const useDMStore = create<DMState>((set, get) => ({
     }
   },
 
-  onReactionAdded: (data: { dmId: number; reaction: { emoji: string; userId: number; user: { name: string } } }) => {
-    // Skip own reactions — already applied optimistically
+  onReactionAdded: (data) => {
     const currentUser = useAuthStore.getState().user;
     if (currentUser && data.reaction.userId === currentUser.id) return;
     const state = get();
-    // Find which conversation contains this DM
     for (const [userIdStr, msgs] of Object.entries(state.messages)) {
       const msg = msgs.find((m) => m.id === data.dmId);
       if (!msg) continue;
       const uid = Number(userIdStr);
-      // Skip if already applied (optimistic update)
       const existing = msg.reactions.find((r) => r.emoji === data.reaction.emoji);
       if (existing?.userIds.includes(data.reaction.userId)) return;
       set((s) => ({
@@ -286,8 +234,7 @@ export const useDMStore = create<DMState>((set, get) => ({
     }
   },
 
-  onReactionRemoved: (data: { dmId: number; emoji: string; userId: number }) => {
-    // Skip own removals — already applied optimistically
+  onReactionRemoved: (data) => {
     const currentUser = useAuthStore.getState().user;
     if (currentUser && data.userId === currentUser.id) return;
     const state = get();
@@ -318,27 +265,9 @@ export const useDMStore = create<DMState>((set, get) => ({
     }
   },
 
-  incrementReplyCount: (messageId: number, userId: number, participant?: { id: number; name: string; avatar: string | null }) => {
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [userId]: (state.messages[userId] ?? []).map((m) => {
-          if (m.id !== messageId) return m;
-          const updatedParticipants = participant && !m.threadParticipants.some((p) => p.id === participant.id)
-            ? [...m.threadParticipants, participant]
-            : m.threadParticipants;
-          return { ...m, replyCount: m.replyCount + 1, threadParticipants: updatedParticipants };
-        }),
-      },
-    }));
-  },
-
   addIncomingMessage: (dm: ApiDirectMessage, currentUserId: number) => {
-    // Thread replies don't appear in the main conversation
-    if (dm.threadId) return;
     const otherUserId = dm.fromUserId === currentUserId ? dm.toUserId : dm.fromUserId;
     const state = get();
-    // Only add if we have this conversation loaded and the message isn't already there
     if (!state.messages[otherUserId]) return;
     if (state.messages[otherUserId].some((m) => m.id === dm.id)) return;
     const message = transformDM(dm);

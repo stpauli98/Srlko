@@ -1,13 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, MessageSquare, Camera } from 'lucide-react';
+import { X, MessageSquare } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { getMyProfile, getUserProfile, updateMyProfile, uploadAvatar, type UserProfile } from '@/lib/api';
+import { getMyProfile, getUserProfile, updateMyProfile, type UserProfile } from '@/lib/api';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useChannelStore } from '@/stores/useChannelStore';
 import { useMessageStore } from '@/stores/useMessageStore';
-import { AvatarCropModal } from './AvatarCropModal';
 import { format } from 'date-fns';
 
 interface ProfileModalProps {
@@ -25,11 +24,9 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editBio, setEditBio] = useState('');
+  const [editAvatar, setEditAvatar] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setIsLoading(true);
@@ -40,6 +37,7 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
         setProfile(data);
         setEditName(data.name);
         setEditBio(data.bio || '');
+        setEditAvatar(data.avatar || '');
       })
       .catch(() => setLoadError('Failed to load profile.'))
       .finally(() => setIsLoading(false));
@@ -53,52 +51,17 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
       const updated = await updateMyProfile({
         name: editName.trim() || profile.name,
         bio: editBio.trim() || null,
+        avatar: editAvatar.trim() || null,
       });
       setProfile(updated);
       setIsEditing(false);
-      // Propagate name change to auth store, cached messages, and DM sidebar
-      useAuthStore.getState().updateUser({ name: updated.name });
-      useMessageStore.getState().updateUserInMessages(updated.id, { name: updated.name });
-      useChannelStore.getState().updateDMUser(updated.id, { userName: updated.name });
+      useAuthStore.getState().updateUser({ name: updated.name, avatar: updated.avatar });
+      useMessageStore.getState().updateUserInMessages(updated.id, { name: updated.name, avatar: updated.avatar ?? undefined });
+      useChannelStore.getState().updateDMUser(updated.id, { userName: updated.name, userAvatar: updated.avatar || '' });
     } catch {
       setSaveError('Failed to save profile. Please try again.');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Validate client-side
-    if (!file.type.startsWith('image/')) {
-      setSaveError('Please select an image file.');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setSaveError('Image must be under 5MB.');
-      return;
-    }
-    setCropImageSrc(URL.createObjectURL(file));
-    // Reset the input so the same file can be re-selected
-    e.target.value = '';
-  };
-
-  const handleCropDone = async (croppedBlob: Blob) => {
-    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
-    setCropImageSrc(null);
-    setIsUploadingAvatar(true);
-    setSaveError(null);
-    try {
-      const updated = await uploadAvatar(croppedBlob);
-      setProfile(updated);
-      useAuthStore.getState().updateUser({ avatar: updated.avatar });
-      useMessageStore.getState().updateUserInMessages(updated.id, { avatar: updated.avatar ?? undefined });
-      useChannelStore.getState().updateDMUser(updated.id, { userAvatar: updated.avatar || '' });
-    } catch {
-      setSaveError('Failed to upload photo. Please try again.');
-    } finally {
-      setIsUploadingAvatar(false);
     }
   };
 
@@ -109,7 +72,6 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
         className="relative w-[400px] rounded-xl bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-slack-border-light px-5 py-4">
           <h2 className="text-[17px] font-bold text-slack-primary">Profile</h2>
           <Button variant="toolbar" size="icon-sm" onClick={onClose}>
@@ -123,33 +85,14 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
           <div className="p-8 text-center text-sm text-slack-error">{loadError}</div>
         ) : profile ? (
           <div className="p-5">
-            {/* Avatar and name */}
             <div className="flex items-center gap-4 mb-4">
-              <div className="relative group">
-                <Avatar
-                  src={profile.avatar}
-                  alt={profile.name}
-                  fallback={profile.name}
-                  size="lg"
-                  status={profile.status as any}
-                />
-                {isOwnProfile && isEditing && (
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploadingAvatar}
-                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                  >
-                    <Camera className="h-5 w-5 text-white" />
-                  </button>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  className="hidden"
-                  onChange={handleFileSelect}
-                />
-              </div>
+              <Avatar
+                src={profile.avatar ?? undefined}
+                alt={profile.name}
+                fallback={profile.name}
+                size="lg"
+                status={profile.status as any}
+              />
               <div>
                 <p className="text-[18px] font-bold text-slack-primary">{profile.name}</p>
                 {profile.email && <p className="text-[13px] text-slack-hint">{profile.email}</p>}
@@ -158,15 +101,6 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
 
             {isEditing ? (
               <div className="space-y-3">
-                {/* Upload photo button */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploadingAvatar}
-                  className="text-[13px] text-slack-link hover:underline cursor-pointer"
-                >
-                  {isUploadingAvatar ? 'Uploading...' : 'Upload photo'}
-                </button>
-
                 <div>
                   <label className="text-[13px] font-medium text-slack-muted">Name</label>
                   <input
@@ -174,6 +108,17 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                     name="name"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
+                    className="mt-1 w-full rounded border border-slack-input-border px-3 py-2 text-[14px] outline-none focus:border-slack-link"
+                  />
+                </div>
+                <div>
+                  <label className="text-[13px] font-medium text-slack-muted">Avatar URL</label>
+                  <input
+                    type="url"
+                    name="avatar"
+                    value={editAvatar}
+                    onChange={(e) => setEditAvatar(e.target.value)}
+                    placeholder="https://example.com/avatar.jpg"
                     className="mt-1 w-full rounded border border-slack-input-border px-3 py-2 text-[14px] outline-none focus:border-slack-link"
                   />
                 </div>
@@ -197,6 +142,7 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                       setSaveError(null);
                       setEditName(profile.name);
                       setEditBio(profile.bio || '');
+                      setEditAvatar(profile.avatar || '');
                     }}>
                     Cancel
                   </Button>
@@ -207,7 +153,6 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
               </div>
             ) : (
               <>
-                {/* Bio */}
                 {profile.bio && (
                   <div className="mb-4">
                     <p className="text-[13px] font-medium text-slack-hint mb-1">Bio</p>
@@ -215,13 +160,11 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                   </div>
                 )}
 
-                {/* Status */}
                 <div className="mb-4">
                   <p className="text-[13px] font-medium text-slack-hint mb-1">Status</p>
                   <p className="text-[14px] text-slack-primary capitalize">{profile.status || 'offline'}</p>
                 </div>
 
-                {/* Joined date */}
                 <div className="mb-4">
                   <p className="text-[13px] font-medium text-slack-hint mb-1">Joined</p>
                   <p className="text-[14px] text-slack-primary">
@@ -229,7 +172,6 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                   </p>
                 </div>
 
-                {/* Message button for other users */}
                 {!isOwnProfile && profile && (
                   <Button
                     data-testid="profile-message-btn"
@@ -246,7 +188,6 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                   </Button>
                 )}
 
-                {/* Edit button for own profile */}
                 {isOwnProfile && (
                   <Button variant="outline" className="w-full" onClick={() => setIsEditing(true)}>
                     Edit Profile
@@ -259,15 +200,6 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
           <div className="p-8 text-center text-sm text-slack-hint">Profile not found</div>
         )}
       </div>
-
-      {/* Avatar crop modal */}
-      {cropImageSrc && (
-        <AvatarCropModal
-          imageSrc={cropImageSrc}
-          onCrop={handleCropDone}
-          onClose={() => { if (cropImageSrc) URL.revokeObjectURL(cropImageSrc); setCropImageSrc(null); }}
-        />
-      )}
     </div>
   );
 }

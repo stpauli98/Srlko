@@ -1,446 +1,245 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { format } from 'date-fns';
-import { FileIcon, Download, Pin, Mic } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Pencil, Trash2, Smile, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Avatar } from '@/components/ui/avatar';
-import { PortalEmojiPicker } from '@/components/ui/emoji-picker';
-import { MessageReactions } from './MessageReactions';
-import { ThreadIndicator } from './ThreadIndicator';
 import { useMessageStore } from '@/stores/useMessageStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useProfileStore } from '@/stores/useProfileStore';
-import { useBookmarkStore } from '@/stores/useBookmarkStore';
-import { useChannelStore } from '@/stores/useChannelStore';
-import { useMessageActions } from '@/hooks/useMessageActions';
-import { useMessageHover } from '@/hooks/useMessageHover';
-import { useMessageEdit } from '@/hooks/useMessageEdit';
-import type { Message as MessageType } from '@/lib/types';
-import { getAuthFileUrl, getFileUrl, markChannelUnread } from '@/lib/api';
-import { renderMessageContent } from '@/lib/renderMessageContent';
-import { ImageLightbox } from './ImageLightbox';
-import { FilePreviewModal } from './FilePreviewModal';
-import { MessageToolbar } from './MessageToolbar';
-import { MessageActionsMenu } from './MessageActionsMenu';
+import { PortalEmojiPicker } from '@/components/ui/emoji-picker';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import type { Message as MessageType } from '@/lib/types';
 
 interface MessageProps {
   message: MessageType;
-  showAvatar: boolean;
-  isCompact: boolean;
+  showHeader?: boolean;
+  showAvatar?: boolean;
+  isCompact?: boolean;
   onOpenThread?: (messageId: number) => void;
   readOnly?: boolean;
-  variant?: 'default' | 'thread';
-  onEditMessage?: (id: number, content: string) => Promise<void>;
-  onDeleteMessage?: (id: number) => Promise<void>;
-  onAddReaction?: (id: number, emoji: string) => void;
-  onRemoveReaction?: (id: number, emoji: string) => void;
 }
 
-export function Message({ message, showAvatar, isCompact, onOpenThread, readOnly, variant = 'default', onEditMessage, onDeleteMessage, onAddReaction, onRemoveReaction }: MessageProps) {
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [lightboxAlt, setLightboxAlt] = useState<string>('');
-  const [previewFile, setPreviewFile] = useState<{ id: number; name: string; size: number; mimetype: string } | null>(null);
-  const { addReaction, removeReaction, editMessage, deleteMessage } = useMessageStore();
-  const currentUser = useAuthStore((s) => s.user);
-  const { openProfile } = useProfileStore();
-  const toggleBookmark = useBookmarkStore((s) => s.toggle);
-  const isBookmarked = useBookmarkStore((s) => s.bookmarkedIds.has(message.id));
-  const { togglePin } = useMessageActions();
-  const setUnreadCount = useChannelStore((s) => s.setUnreadCount);
-  const { isHovered, setIsHovered, onMouseEnter, onMouseLeave, onTouchStart } = useMessageHover();
-  const isThread = variant === 'thread';
-  const effectiveAddReaction = onAddReaction ?? addReaction;
-  const effectiveRemoveReaction = onRemoveReaction ?? removeReaction;
-  const {
-    editingId, editContent, editError, setEditContent, editInputRef,
-    startEdit, cancelEdit, saveEdit, handleEditKeyDown,
-  } = useMessageEdit({
-    onSave: onEditMessage ?? ((id, content) => editMessage(id, content)),
-  });
-  const isOwner = currentUser?.id === message.userId;
-  const isEditing = editingId === message.id;
+export function Message({ message, showHeader, showAvatar, readOnly }: MessageProps) {
+  const showHead = showHeader !== undefined ? showHeader : showAvatar !== undefined ? showAvatar : true;
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const openProfile = useProfileStore((s) => s.openProfile);
+  const editMessage = useMessageStore((s) => s.editMessage);
+  const deleteMessage = useMessageStore((s) => s.deleteMessage);
+  const addReaction = useMessageStore((s) => s.addReaction);
+  const removeReaction = useMessageStore((s) => s.removeReaction);
 
-  // Collapsible long messages
-  const MAX_COLLAPSED_HEIGHT = 150;
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [isCollapsed, setIsCollapsed] = useState(true);
-  const [needsCollapse, setNeedsCollapse] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
+  const [showDelete, setShowDelete] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const reactionButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const measureContent = useCallback(() => {
-    if (contentRef.current) {
-      setNeedsCollapse(contentRef.current.scrollHeight > MAX_COLLAPSED_HEIGHT);
-    }
-  }, []);
+  const isOwn = message.userId === currentUserId;
 
   useEffect(() => {
-    measureContent();
-  }, [message.content, measureContent]);
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
 
-  const formattedTime = format(message.createdAt, 'h:mm a');
-
-  const handleEdit = () => {
-    startEdit(message.id, message.content);
-    setShowMoreMenu(false);
+  const startEdit = () => {
+    setEditContent(message.content);
+    setIsEditing(true);
   };
 
-  const handleDelete = () => {
-    setShowMoreMenu(false);
-    setShowDeleteConfirm(true);
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setEditContent(message.content);
   };
 
-  const confirmDelete = async () => {
-    setShowDeleteConfirm(false);
-    await (onDeleteMessage ?? deleteMessage)(message.id);
+  const saveEdit = async () => {
+    const trimmed = editContent.trim();
+    if (!trimmed || trimmed === message.content) {
+      setIsEditing(false);
+      return;
+    }
+    try {
+      await editMessage(message.id, trimmed);
+      setIsEditing(false);
+    } catch {
+      // keep edit mode open so user can retry
+    }
   };
 
-  const keepOpen = showEmojiPicker || showMoreMenu || isEditing;
+  const handleReactionToggle = (emoji: string) => {
+    if (!currentUserId) return;
+    const existing = message.reactions.find((r) => r.emoji === emoji);
+    if (existing?.userIds.includes(currentUserId)) {
+      removeReaction(message.id, emoji);
+    } else {
+      addReaction(message.id, emoji);
+    }
+  };
 
   return (
-    <div
-      className={cn(
-        'group relative flex px-5',
-        message.isPinned ? 'bg-slack-pinned hover:bg-slack-pinned' : 'hover:bg-slack-hover',
-        showAvatar ? 'pt-2 pb-px' : 'py-px'
-      )}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={() => onMouseLeave(() => setShowMoreMenu(false))}
-      onTouchStart={onTouchStart}
-    >
-      {/* Fixed 36px left gutter column with 8px gap to content */}
-      <div className="w-9 flex-shrink-0 mr-2">
-        {showAvatar ? (
-          <button onClick={() => openProfile(message.userId)}>
-            <Avatar
-              src={message.user.avatar}
-              alt={message.user.name}
-              fallback={message.user.name}
-              size="md"
-              className="mt-[5px]"
-            />
+    <div className="group relative px-4 py-1 hover:bg-gray-50">
+      <div className="flex gap-3">
+        {showHead ? (
+          <button
+            onClick={() => openProfile(message.user.id)}
+            className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-gray-200"
+          >
+            {message.user.avatar ? (
+              <img src={message.user.avatar} alt={message.user.name} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-blue-500 text-sm font-medium text-white">
+                {message.user.name.charAt(0).toUpperCase()}
+              </div>
+            )}
           </button>
         ) : (
-          <span className="text-[12px] text-slack-secondary opacity-0 group-hover:opacity-100 leading-[22px] select-none" title={format(message.createdAt, 'EEEE, MMMM d, yyyy h:mm:ss a')}>
-            {format(message.createdAt, 'h:mm')}
-          </span>
+          <div className="h-0 w-10 shrink-0" />
         )}
-      </div>
 
-      {/* Flex-grow right content column */}
-      <div className="flex-1 min-w-0">
-        {showAvatar && (
-          <div className="flex items-center gap-2">
-            <button
-              data-testid="sender-name"
-              onClick={() => openProfile(message.userId)}
-              className="text-[15px] font-bold text-slack-primary hover:underline"
-            >
-              {message.user.displayName || message.user.name}
-            </button>
-            <span className="text-[12px] font-normal text-slack-secondary ml-1" title={format(message.createdAt, 'EEEE, MMMM d, yyyy h:mm:ss a')}>{formattedTime}</span>
-            {message.isEdited && (
-              <span className="text-[12px] text-slack-secondary">(edited)</span>
-            )}
-            {message.isPinned && (
-              <span data-testid="pin-indicator" className="inline-flex items-center gap-0.5 text-[12px] text-slack-pin-indicator ml-1">
-                <Pin className="h-3 w-3" />
-                Pinned
+        <div className="min-w-0 flex-1">
+          {showHeader && (
+            <div className="mb-0.5 flex items-baseline gap-2">
+              <button
+                onClick={() => openProfile(message.user.id)}
+                className="text-[15px] font-bold text-gray-900 hover:underline"
+              >
+                {message.user.name}
+              </button>
+              <span className="text-[11px] text-gray-500">
+                {message.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
-            )}
-          </div>
-        )}
+              {message.isEdited && (
+                <span className="text-[11px] text-gray-400">(edited)</span>
+              )}
+            </div>
+          )}
 
-        {isEditing ? (
-          <div className="mt-1">
-            <textarea
-              ref={editInputRef}
-              value={editContent}
-              onChange={(e) => { setEditContent(e.target.value); }}
-              onKeyDown={(e) => handleEditKeyDown(e, message.content)}
-              className={cn(
-                "w-full rounded border bg-white p-2 text-[15px] text-slack-primary leading-[22px] resize-none outline-none",
-                editError ? "border-red-500" : "border-slack-link"
-              )}
-              rows={2}
-            />
-            {editError && (
-              <p className="mt-1 text-[12px] text-red-600">{editError}</p>
-            )}
-            <div className="mt-1 flex items-center gap-2 text-[12px]">
-              <button
-                onClick={cancelEdit}
-                className="text-slack-secondary hover:underline"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => saveEdit(message.content)}
-                className="rounded bg-slack-btn px-3 py-1 text-white hover:bg-slack-btn-hover"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="relative">
-            <div
-              ref={contentRef}
-              className={cn(
-                "text-[15px] font-normal text-slack-primary leading-[22px] whitespace-pre-wrap break-words",
-                needsCollapse && isCollapsed && "overflow-hidden"
-              )}
-              style={needsCollapse && isCollapsed ? { maxHeight: MAX_COLLAPSED_HEIGHT } : undefined}
-              onClick={(e) => {
-                const el = (e.target as HTMLElement).closest('[data-mention-id]');
-                if (!el) return;
-                const id = el.getAttribute('data-mention-id');
-                if (id) openProfile(Number(id));
-              }}
-            >
-              {renderMessageContent(message.content)}
-              {!showAvatar && message.isEdited && (
-                <span className="text-[12px] text-slack-secondary ml-1">(edited)</span>
-              )}
-            </div>
-            {needsCollapse && isCollapsed && (
-              <div
-                className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none"
-                style={{
-                  background: `linear-gradient(to top, ${message.isPinned ? '#FEF9ED' : '#ffffff'}, transparent)`,
+          {isEditing ? (
+            <div>
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+                  if (e.key === 'Escape') cancelEdit();
                 }}
+                className="w-full rounded-md border border-blue-400 p-2 text-[15px] outline-none"
+                rows={Math.min(editContent.split('\n').length, 6)}
+                autoFocus
               />
-            )}
-            {needsCollapse && (
-              <button
-                onClick={() => {
-                  const wasCollapsed = isCollapsed;
-                  setIsCollapsed(!isCollapsed);
-                  if (wasCollapsed && contentRef.current) {
-                    // After expanding, scroll the message top into view
-                    requestAnimationFrame(() => {
-                      contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    });
-                  }
-                }}
-                className="relative z-10 text-[13px] font-medium text-slack-link hover:underline mt-0.5"
-              >
-                {isCollapsed ? 'Show more' : 'Show less'}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* File Attachments */}
-        {message.files && message.files.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-2">
-            {message.files.map((file) => (
-              <div
-                key={file.id}
-                data-testid="message-file"
-                className="rounded-lg border border-slack-border overflow-hidden"
-              >
-                {file.mimetype.startsWith('audio/') || (file.mimetype === 'video/webm' && file.originalName.startsWith('voice-message')) ? (
-                  <div className="px-3 py-2.5">
-                    <audio
-                      controls
-                      playsInline
-                      controlsList="nodownload noplaybackrate"
-                      preload="metadata"
-                      className="h-8"
-                      src={getFileUrl(file.id)}
-                    />
-                  </div>
-                ) : file.mimetype.startsWith('video/') ? (
-                  <div>
-                    <video
-                      controls
-                      playsInline
-                      preload="metadata"
-                      className="max-h-[300px] max-w-full"
-                      src={getFileUrl(file.id)}
-                    />
-                    <div className="flex items-center gap-2 px-3 py-1.5 border-t border-slack-border">
-                      <span className="text-[13px] text-slack-link truncate max-w-[200px]">
-                        {file.originalName}
-                      </span>
-                      <span className="text-[11px] text-slack-disabled flex-shrink-0">
-                        {formatFileSize(file.size)}
-                      </span>
-                      <a
-                        href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
-                        download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
-                        className="ml-auto flex-shrink-0 text-slack-disabled hover:text-slack-primary"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Download className="h-4 w-4" />
-                      </a>
-                    </div>
-                  </div>
-                ) : file.mimetype.startsWith('image/') ? (
-                  <div>
-                    <button
-                      data-testid="image-thumbnail"
-                      onClick={() => { setLightboxSrc(getFileUrl(file.id)); setLightboxAlt(file.originalName); }}
-                      className="block cursor-zoom-in focus:outline-none"
-                    >
-                      <img
-                        src={getFileUrl(file.id)}
-                        alt={file.originalName}
-                        className="max-h-[200px] max-w-[300px] object-contain"
-                      />
-                    </button>
-                    <div className="flex items-center gap-2 px-3 py-1.5 border-t border-slack-border">
-                      <span data-testid="image-filename" className="text-[13px] text-slack-link truncate max-w-[200px]">
-                        {file.originalName}
-                      </span>
-                      <span data-testid="image-filesize" className="text-[11px] text-slack-disabled flex-shrink-0">
-                        {formatFileSize(file.size)}
-                      </span>
-                      <a
-                        data-testid="image-download"
-                        href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
-                        download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
-                        className="ml-auto flex-shrink-0 text-slack-disabled hover:text-slack-primary"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Download className="h-4 w-4" />
-                      </a>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 px-3 py-2.5 border-l-4 border-slack-link">
-                    <FileIcon className="h-8 w-8 text-slack-link flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <button
-                        onClick={() => setPreviewFile({ id: file.id, name: file.originalName, size: file.size, mimetype: file.mimetype })}
-                        className="block text-[13px] font-medium text-slack-link hover:underline truncate text-left"
-                      >
-                        {file.originalName}
-                      </button>
-                      <span className="text-[11px] text-slack-disabled">
-                        {formatFileSize(file.size)}
-                      </span>
-                    </div>
-                    <a
-                      href={getAuthFileUrl(`/files/${file.id}/download`, { download: true })}
-                      download={file.originalName.replace(/[/\\:\0]/g, '_')} rel="noopener"
-                      className="flex-shrink-0 text-slack-disabled hover:text-slack-primary"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
-                  </div>
-                )}
+              <div className="mt-1 flex gap-2">
+                <button
+                  onClick={saveEdit}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-[13px] font-medium text-white hover:bg-blue-700"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={cancelEdit}
+                  className="rounded-md border border-gray-300 px-3 py-1 text-[13px] font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="whitespace-pre-wrap break-words text-[15px] leading-5 text-gray-900">
+              {message.content}
+            </div>
+          )}
 
-        {/* Reactions */}
-        {message.reactions.length > 0 && (
-          <MessageReactions
-            reactions={message.reactions}
-            messageId={message.id}
-            onAddReaction={effectiveAddReaction}
-            onRemoveReaction={effectiveRemoveReaction}
-          />
-        )}
+          {message.reactions.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {message.reactions.map((r) => {
+                const isActive = currentUserId ? r.userIds.includes(currentUserId) : false;
+                return (
+                  <button
+                    key={r.emoji}
+                    onClick={() => handleReactionToggle(r.emoji)}
+                    className={cn(
+                      'flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px]',
+                      isActive
+                        ? 'border-blue-400 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300',
+                    )}
+                    title={r.userNames.join(', ')}
+                  >
+                    <span>{r.emoji}</span>
+                    <span>{r.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-        {/* Thread indicator */}
-        {message.threadCount > 0 && (
-          <ThreadIndicator
-            replyCount={message.threadCount}
-            author={{ id: message.user.id, name: message.user.name, avatar: message.user.avatar }}
-            participants={message.threadParticipants}
-            onClick={() => onOpenThread?.(message.id)}
-          />
+        {!readOnly && (
+        <div className="absolute right-4 top-1 hidden items-center gap-0.5 rounded-md border border-gray-200 bg-white p-0.5 shadow-sm group-hover:flex">
+          <button
+            ref={reactionButtonRef}
+            onClick={() => setShowEmoji(true)}
+            className="flex h-7 w-7 items-center justify-center rounded hover:bg-gray-100"
+            aria-label="Add reaction"
+          >
+            <Smile className="h-4 w-4 text-gray-600" />
+          </button>
+          {isOwn && (
+            <div ref={menuRef} className="relative">
+              <button
+                onClick={() => setShowMenu((v) => !v)}
+                className="flex h-7 w-7 items-center justify-center rounded hover:bg-gray-100"
+                aria-label="Message actions"
+              >
+                <MoreHorizontal className="h-4 w-4 text-gray-600" />
+              </button>
+              {showMenu && (
+                <div className="absolute right-0 top-8 z-10 min-w-[140px] rounded-md border border-gray-200 bg-white py-1 shadow-md">
+                  <button
+                    onClick={() => { startEdit(); setShowMenu(false); }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-gray-100"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => { setShowDelete(true); setShowMenu(false); }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         )}
       </div>
 
-      {/* Hover Actions */}
-      {!readOnly && (isHovered || keepOpen) && (
-        <MessageToolbar
-          className="absolute -top-4 right-5"
-          onEmojiClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          onThreadClick={!isThread ? () => onOpenThread?.(message.id) : undefined}
-          onBookmarkClick={!isThread ? () => toggleBookmark(message.id) : undefined}
-          isBookmarked={!isThread ? isBookmarked : undefined}
-          onMoreClick={() => setShowMoreMenu(!showMoreMenu)}
-        />
-      )}
-
-      {/* More actions dropdown */}
-      {showMoreMenu && (
-        <MessageActionsMenu
-          anchorClassName="absolute -top-4 right-5 mt-9"
-          onClose={() => setShowMoreMenu(false)}
-          onMarkUnread={!isThread ? () => {
-            setShowMoreMenu(false);
-            const allMessages = useMessageStore.getState().messages;
-            const unreadCount = allMessages.filter(
-              (m) => m.channelId === message.channelId && m.id >= message.id
-            ).length;
-            setUnreadCount(message.channelId, unreadCount);
-            markChannelUnread(message.channelId, message.id).catch(() => {});
-          } : undefined}
-          onPin={!isThread ? () => {
-            setShowMoreMenu(false);
-            togglePin(message.id, message.isPinned);
-          } : undefined}
-          isPinned={message.isPinned}
-          showOwnerActions={isOwner}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
-      )}
-
-      {/* Emoji Picker from hover toolbar */}
-      {showEmojiPicker && (
+      {showEmoji && (
         <PortalEmojiPicker
-          anchorClassName="absolute -top-4 right-5 mt-9"
           onEmojiSelect={(emoji) => {
-            effectiveAddReaction(message.id, emoji.native);
-            setShowEmojiPicker(false);
+            handleReactionToggle(emoji.native);
+            setShowEmoji(false);
           }}
-          onClickOutside={() => setShowEmojiPicker(false)}
+          onClickOutside={() => setShowEmoji(false)}
         />
       )}
 
-      {/* Image Lightbox */}
-      {lightboxSrc && (
-        <ImageLightbox
-          src={lightboxSrc}
-          alt={lightboxAlt}
-          onClose={() => setLightboxSrc(null)}
-        />
-      )}
-
-      {/* File Preview Modal */}
-      {previewFile && (
-        <FilePreviewModal
-          fileId={previewFile.id}
-          fileName={previewFile.name}
-          fileSize={previewFile.size}
-          mimetype={previewFile.mimetype}
-          onClose={() => setPreviewFile(null)}
-        />
-      )}
-
-      {/* Delete Confirmation Dialog */}
-      {showDeleteConfirm && (
+      {showDelete && (
         <DeleteConfirmDialog
-          onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={confirmDelete}
+          onConfirm={() => {
+            deleteMessage(message.id);
+            setShowDelete(false);
+          }}
+          onCancel={() => setShowDelete(false)}
         />
       )}
     </div>
   );
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

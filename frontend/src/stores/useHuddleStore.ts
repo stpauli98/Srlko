@@ -228,8 +228,6 @@ export const useHuddleStore = create<HuddleState>((set, get) => ({
   },
 
   onHuddleConnected: (data) => {
-    const state = get();
-
     // If we had an outgoing invite, clear it (we're now connected)
     set({
       huddleId: data.huddleId,
@@ -359,7 +357,7 @@ export const useHuddleStore = create<HuddleState>((set, get) => ({
 
 // ── WebRTC Peer Connection Setup ─────────────────────────────────────
 
-function setupPeerConnection(huddleId: string, remoteUserId: number, isInitiator: boolean): RTCPeerConnection | null {
+function setupPeerConnection(huddleId: string, _remoteUserId: number, isInitiator: boolean): RTCPeerConnection | null {
   const state = useHuddleStore.getState();
   const { localStream } = state;
   if (!localStream) return null;

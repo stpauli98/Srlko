@@ -3,11 +3,9 @@ import { UserPlus, X } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { getChannelMembers, getUsers, addChannelMember, getChannel, type ChannelMember, type AuthUser } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
-import { Button } from '@/components/ui/button';
 import { ProfileModal } from '@/components/ProfileModal';
 import { PanelHeader } from './PanelHeader';
 import { useChannelStore } from '@/stores/useChannelStore';
-import { useAdminStore } from '@/stores/useAdminStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 
 interface MembersPanelProps {
@@ -18,7 +16,6 @@ interface MembersPanelProps {
 export function MembersPanel({ channelId, onClose }: MembersPanelProps) {
   const { user: currentUser } = useAuthStore();
   const channelStoreRemove = useChannelStore((s) => s.removeChannelMember);
-  const adminStoreRemove = useAdminStore((s) => s.removeChannelMember);
   const [members, setMembers] = useState<ChannelMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -110,7 +107,7 @@ export function MembersPanel({ channelId, onClose }: MembersPanelProps) {
       // Workspace admins use admin endpoint, channel owners/mods use channel endpoint
       const isWorkspaceAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'OWNER';
       if (isWorkspaceAdmin) {
-        await adminStoreRemove(channelId, confirmRemove.userId);
+        await channelStoreRemove(channelId, confirmRemove.userId);
       } else {
         await channelStoreRemove(channelId, confirmRemove.userId);
       }
@@ -323,7 +320,7 @@ function AddPeopleForm({
               className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-slack-hover disabled:opacity-50"
             >
               <Avatar
-                src={user.avatar}
+                src={user.avatar ?? undefined}
                 alt={user.name}
                 fallback={user.name}
                 size="sm"
@@ -366,7 +363,7 @@ function MemberRow({ member, onClick, onRemove }: { member: ChannelMember; onCli
         onClick={onClick}
         className="flex w-full items-center gap-2 rounded px-2 py-1.5 hover:bg-slack-hover cursor-pointer">
         <Avatar
-          src={member.user.avatar}
+          src={member.user.avatar ?? undefined}
           alt={member.user.name}
           fallback={member.user.name}
           size="sm"

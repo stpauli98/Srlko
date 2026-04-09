@@ -58,7 +58,7 @@ export function UnreadsPage() {
               <div
                 key={msg.id}
                 className="flex items-start gap-3 rounded-lg p-3 hover:bg-slack-hover cursor-pointer group"
-                onClick={() => navigate(`/c/${msg.channel.id}`, { state: { scrollToMessageId: msg.id } })}
+                onClick={() => msg.channel && navigate(`/c/${msg.channel.id}`, { state: { scrollToMessageId: msg.id } })}
               >
                 <Avatar
                   src={msg.user.avatar ?? undefined}
@@ -79,10 +79,12 @@ export function UnreadsPage() {
                   <div className="text-[15px] text-slack-primary leading-[22px] whitespace-pre-wrap break-words line-clamp-3">
                     {renderMessageContent(msg.content)}
                   </div>
-                  <div className="flex items-center gap-1 mt-1 text-[12px] text-slack-hint">
-                    <Hash className="h-3 w-3" />
-                    <span>{msg.channel.name}</span>
-                  </div>
+                  {msg.channel && (
+                    <div className="flex items-center gap-1 mt-1 text-[12px] text-slack-hint">
+                      <Hash className="h-3 w-3" />
+                      <span>{msg.channel.name}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

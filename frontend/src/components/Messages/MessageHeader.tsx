@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Hash, Lock, Star, MoreVertical, LogOut, Menu, Search } from 'lucide-react';
+import { Hash, Lock, MoreVertical, LogOut, Menu, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getChannelMembers, type ChannelMember } from '@/lib/api';
 import { useChannelStore } from '@/stores/useChannelStore';
@@ -8,8 +8,6 @@ import type { Channel } from '@/lib/types';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { HeaderSearch } from './HeaderSearch';
-import { HeaderNotifications } from './HeaderNotifications';
-import { HeaderTabs } from './HeaderTabs';
 import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { useMobileStore } from '@/stores/useMobileStore';
 
@@ -17,23 +15,17 @@ interface MessageHeaderProps {
   channel: Channel;
   showMembers?: boolean;
   onToggleMembers?: () => void;
-  onTogglePins?: () => void;
-  showPins?: boolean;
-  onToggleFiles?: () => void;
-  showFiles?: boolean;
   readOnly?: boolean;
 }
 
-export function MessageHeader({ channel, showMembers, onToggleMembers, onTogglePins, showPins, onToggleFiles, showFiles, readOnly }: MessageHeaderProps) {
+export function MessageHeader({ channel, showMembers, onToggleMembers, readOnly }: MessageHeaderProps) {
   const navigate = useNavigate();
   const openSidebar = useMobileStore((s) => s.openSidebar);
-  const toggleStar = useChannelStore((s) => s.toggleStar);
   const leaveChannel = useChannelStore((s) => s.leaveChannel);
   const [showMenu, setShowMenu] = useState(false);
   const [previewMembers, setPreviewMembers] = useState<ChannelMember[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close channel menu when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -46,17 +38,14 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
     }
   }, [showMenu]);
 
-  // Fetch up to 3 member avatars for preview in the header
   useEffect(() => {
     let cancelled = false;
     getChannelMembers(channel.id)
       .then((data) => {
         if (!cancelled) setPreviewMembers(data.slice(0, 3));
       })
-      .catch(() => { /* Non-critical preview — header still usable without avatars */ });
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => { /* Non-critical */ });
+    return () => { cancelled = true; };
   }, [channel.id]);
 
   const [leaveError, setLeaveError] = useState<string | null>(null);
@@ -79,9 +68,7 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
 
   return (
     <header className="flex flex-col flex-shrink-0 border-b border-slack-border bg-white pt-[env(safe-area-inset-top)]">
-      {/* Top Row - Channel name and actions */}
       <div className="flex h-[49px] items-center justify-between px-4">
-        {/* Left Section */}
         <div className="flex items-center gap-1">
           <button
             onClick={openSidebar}
@@ -96,20 +83,8 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
             {channel.isPrivate ? <Lock className="h-[16px] w-[16px] text-slack-secondary" /> : <Hash className="h-[16px] w-[16px] text-slack-secondary" />}
             <span className="text-[18px] font-black text-slack-primary">{channel.name}</span>
           </div>
-          {!readOnly && (
-            <Button
-              variant="toolbar"
-              size="icon-xs"
-              data-testid="star-channel-button"
-              onClick={() => toggleStar(channel.id)}
-              title={channel.isStarred ? 'Remove from Starred' : 'Add to Starred'}
-            >
-              <Star className={cn('h-4 w-4', channel.isStarred ? 'fill-yellow-400 text-yellow-400' : 'text-slack-secondary')} />
-            </Button>
-          )}
         </div>
 
-        {/* Right Section */}
         <div className="flex items-center gap-2">
           <button
             data-testid="member-avatars-button"
@@ -136,8 +111,6 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
             ) : null}
             <span>{channel.memberCount}</span>
           </button>
-          <div className="hidden sm:block h-4 w-px bg-slack-border" />
-          <HeaderNotifications excludeChannelId={channel.id} />
           <div className="hidden sm:block h-4 w-px bg-slack-border" />
           <div className="hidden sm:block">
             <HeaderSearch />
@@ -175,7 +148,6 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
         </div>
       </div>
 
-      {/* Leave channel error banner */}
       {leaveError && (
         <div data-testid="leave-error" className="flex items-center justify-between bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700">
           <span>{leaveError}</span>
@@ -183,15 +155,6 @@ export function MessageHeader({ channel, showMembers, onToggleMembers, onToggleP
         </div>
       )}
 
-      {/* Tabs Row */}
-      <HeaderTabs
-        showPins={showPins}
-        showFiles={showFiles}
-        onTogglePins={onTogglePins}
-        onToggleFiles={onToggleFiles}
-      />
-
-      {/* Mobile search overlay */}
       {showMobileSearch && (
         <MobileSearchOverlay onClose={() => setShowMobileSearch(false)} />
       )}

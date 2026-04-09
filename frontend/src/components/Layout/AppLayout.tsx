@@ -2,14 +2,11 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { MessageArea } from '@/components/Messages/MessageArea';
+import { UnreadsPage } from '@/components/Messages/UnreadsPage';
 import { ProfileModal } from '@/components/ProfileModal';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useMobileStore } from '@/stores/useMobileStore';
 import { useConnectionStore } from '@/stores/useConnectionStore';
-import { AdminPage } from '@/components/Admin/AdminPage';
-import { FilesPage } from '@/components/Messages/FilesPage';
-import { UnreadsPage } from '@/components/Messages/UnreadsPage';
-import { LaterPage } from '@/components/Messages/LaterPage';
 
 export function AppLayout() {
   const { isOpen, userId, closeProfile } = useProfileStore();
@@ -25,18 +22,7 @@ export function AppLayout() {
     }
   }, [sidebarOpen]);
 
-  let content: React.ReactNode;
-  if (location.pathname === '/admin') {
-    content = <AdminPage />;
-  } else if (location.pathname === '/unreads') {
-    content = <UnreadsPage />;
-  } else if (location.pathname === '/files') {
-    content = <FilesPage />;
-  } else if (location.pathname === '/later') {
-    content = <LaterPage />;
-  } else {
-    content = <MessageArea />;
-  }
+  const content = location.pathname === '/unreads' ? <UnreadsPage /> : <MessageArea />;
 
   return (
     <div className="flex h-dvh w-screen overflow-hidden bg-white">

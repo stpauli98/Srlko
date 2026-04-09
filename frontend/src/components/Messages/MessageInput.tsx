@@ -1,36 +1,10 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
-import {
-  SendHorizontal,
-  ChevronDown,
-} from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react';
+import { SendHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PortalEmojiPicker } from '@/components/ui/emoji-picker';
-import { scheduleMessage } from '@/lib/api';
-import { serializeDelta } from '@/lib/serializeDelta';
-import { LinkModal } from './LinkModal';
-import { ScheduleModal } from './ScheduleModal';
-import { ScheduleMenu } from './ScheduleMenu';
-import { FormatToolbar } from './FormatToolbar';
-import { FilePreview } from './FilePreview';
-import { MentionDropdown } from './MentionDropdown';
-import { EmojiAutocomplete } from './EmojiAutocomplete';
-import { EditorToolbar } from './EditorToolbar';
-import { useQuillEditor } from '@/hooks/useQuillEditor';
-import { useClickOutside } from '@/hooks/useClickOutside';
-import { ErrorBanner, SuccessBanner } from '@/components/ui/ErrorBanner';
-
-// Per-channel/DM draft storage (session-only, survives channel switches)
-const drafts = new Map<string, any>();
-
-function getDraftKey(channelId?: number, dmParticipantIds?: number[]): string {
-  if (channelId) return `ch:${channelId}`;
-  if (dmParticipantIds) return `dm:${dmParticipantIds.sort().join(',')}`;
-  return '';
-}
 
 interface MessageInputProps {
   placeholder: string;
-  onSend: (content: string, fileIds?: number[]) => Promise<void>;
+  onSend: (content: string) => Promise<void>;
   sendError: string | null;
   clearSendError: () => void;
   channelId?: number;
@@ -38,252 +12,108 @@ interface MessageInputProps {
   testIdPrefix?: string;
 }
 
-export const MessageInput = React.memo(function MessageInput({ placeholder, onSend, sendError, clearSendError, channelId, dmParticipantIds, testIdPrefix }: MessageInputProps) {
+// Per-channel/DM draft storage (session-only)
+const drafts = new Map<string, string>();
+
+function getDraftKey(channelId?: number, dmParticipantIds?: number[]): string {
+  if (channelId) return `ch:${channelId}`;
+  if (dmParticipantIds) return `dm:${dmParticipantIds.sort().join(',')}`;
+  return '';
+}
+
+export function MessageInput({ placeholder, onSend, sendError, clearSendError, channelId, dmParticipantIds, testIdPrefix }: MessageInputProps) {
+  const draftKey = getDraftKey(channelId, dmParticipantIds);
+  const [value, setValue] = useState<string>(() => (draftKey ? drafts.get(draftKey) ?? '' : ''));
+  const [sending, setSending] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prefix = testIdPrefix ? `${testIdPrefix}-` : '';
 
-  // Schedule message state
-  const [showScheduleMenu, setShowScheduleMenu] = useState(false);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduleConfirm, setScheduleConfirm] = useState<string | null>(null);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
-  const [isScheduling, setIsScheduling] = useState(false);
-  const scheduleMenuRef = useRef<HTMLDivElement>(null);
+  // Load draft when channel/DM changes
+  useEffect(() => {
+    setValue(draftKey ? drafts.get(draftKey) ?? '' : '');
+  }, [draftKey]);
 
-  const handleSendRef = useRef<() => void>(() => {});
+  // Save draft on change
+  useEffect(() => {
+    if (!draftKey) return;
+    if (value) drafts.set(draftKey, value);
+    else drafts.delete(draftKey);
+  }, [value, draftKey]);
 
-  const editor = useQuillEditor({
-    placeholder,
-    onSendRef: handleSendRef,
-    dmParticipantIds,
-    testId: testIdPrefix ? `${testIdPrefix}-message-input` : undefined,
-    enableInlineCode: true,
-  });
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, [value]);
 
   const handleSend = useCallback(async () => {
-    const quill = editor.quillRef.current;
-    if (!quill) return;
-    const text = serializeDelta(quill);
-    if (!text && editor.pendingFiles.length === 0) return;
-    const content = text || '';
-    const fileIds = editor.pendingFiles.map((f) => f.id);
+    const content = value.trim();
+    if (!content || sending) return;
+    setSending(true);
     try {
-      await onSend(content, fileIds.length > 0 ? fileIds : undefined);
-      editor.clearEditor();
-      // Clear saved draft on send
-      const key = getDraftKey(channelId, dmParticipantIds);
-      if (key) drafts.delete(key);
+      await onSend(content);
+      setValue('');
+      if (draftKey) drafts.delete(draftKey);
     } catch {
-      // Send failed — editor content is preserved so the user doesn't lose their message
+      // Error banner will show from sendError; value is preserved
+    } finally {
+      setSending(false);
     }
-  }, [onSend, editor, channelId, dmParticipantIds]);
+  }, [value, onSend, sending, draftKey]);
 
-  handleSendRef.current = handleSend;
-
-  const handleSchedule = useCallback(
-    async (scheduledAt: Date) => {
-      const quill = editor.quillRef.current;
-      if (!quill || !channelId) return;
-      const text = serializeDelta(quill);
-      if (!text) return;
-
-      setIsScheduling(true);
-      setScheduleError(null);
-      try {
-        await scheduleMessage(channelId, text, scheduledAt);
-        editor.clearEditor();
-        setShowScheduleMenu(false);
-        setShowScheduleModal(false);
-
-        const formatted = scheduledAt.toLocaleString(undefined, {
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        });
-        setScheduleConfirm(`Scheduled for ${formatted}`);
-        setTimeout(() => setScheduleConfirm(null), 4000);
-      } catch {
-        setScheduleError('Failed to schedule message. Please try again.');
-        setTimeout(() => setScheduleError(null), 4000);
-      } finally {
-        setIsScheduling(false);
-      }
-    },
-    [channelId, editor],
-  );
-
-  // Close schedule menu on outside click
-  const closeScheduleMenu = useCallback(() => setShowScheduleMenu(false), []);
-  useClickOutside(scheduleMenuRef, closeScheduleMenu, showScheduleMenu);
-
-  // Save draft and restore when switching channels/DMs
-  const prevKeyRef = useRef<string>('');
-  useEffect(() => {
-    const key = getDraftKey(channelId, dmParticipantIds);
-    const quill = editor.quillRef.current;
-
-    // Save draft from previous channel/DM
-    if (prevKeyRef.current && quill) {
-      const delta = quill.getContents();
-      const text = quill.getText().trim();
-      if (text) {
-        drafts.set(prevKeyRef.current, delta);
-      } else {
-        drafts.delete(prevKeyRef.current);
-      }
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
-
-    // Clear and restore draft for new channel/DM
-    editor.clearEditor();
-    if (key && quill) {
-      const savedDraft = drafts.get(key);
-      if (savedDraft) {
-        quill.setContents(savedDraft);
-        editor.setCanSend(true);
-      }
-    }
-
-    prevKeyRef.current = key;
-  }, [channelId, dmParticipantIds]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleCustomSchedule = () => {
-    setShowScheduleMenu(false);
-    setShowScheduleModal(true);
   };
 
-  const hasContent = editor.canSend || editor.pendingFiles.length > 0;
-
   return (
-    <div className="relative px-5 pb-6 pt-4 bg-white">
-      <div className="slawk-editor rounded-[8px] border border-slack-border-light">
-        <FormatToolbar onApplyFormat={editor.applyFormat} />
-        <FilePreview files={editor.pendingFiles} onRemove={editor.removePendingFile} />
-
-        {editor.isUploading && (
-          <div className="px-3 py-1 text-xs text-slack-hint">Uploading...</div>
-        )}
-
-        <div ref={editor.editorRef} />
-
-        {editor.showEmojiAutocomplete && editor.filteredEmojis.length > 0 && (
-          <EmojiAutocomplete
-            ref={editor.emojiAutocompleteRef}
-            emojis={editor.filteredEmojis}
-            selectedIndex={editor.emojiSelectedIndex}
-            query={editor.emojiQuery}
-            onSelect={editor.insertEmojiFromAutocomplete}
-          />
-        )}
-
-        {editor.showMentionDropdown && (
-          <MentionDropdown
-            ref={editor.mentionDropdownRef}
-            users={editor.mentionUsers}
-            selectedIndex={editor.mentionSelectedIndex}
-            onSelect={editor.insertMention}
-          />
-        )}
-
-        {editor.showEmojiPicker && (
-          <PortalEmojiPicker
-            anchorClassName="absolute bottom-full left-0 mb-2"
-            onEmojiSelect={editor.handleEmojiSelect}
-            onClickOutside={() => editor.setShowEmojiPicker(false)}
-          />
-        )}
-
-        <input
-          ref={editor.fileInputRef}
-          type="file"
-          className="hidden"
-          accept="image/*,audio/*,video/*,.pdf,.txt,.json,.zip"
-          onChange={editor.handleFileSelect}
+    <div className="border-t border-slack-border bg-white px-4 py-3">
+      {sendError && (
+        <div className="mb-2 flex items-center justify-between rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-[13px] text-red-800">
+          <span>{sendError}</span>
+          <button
+            onClick={clearSendError}
+            className="text-red-600 hover:text-red-800"
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      <div className="flex items-end gap-2 rounded-md border border-slack-border bg-white px-3 py-2 focus-within:border-blue-500">
+        <textarea
+          ref={textareaRef}
+          data-testid={`${prefix}message-input`}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          rows={1}
+          className={cn(
+            'flex-1 resize-none border-0 bg-transparent text-[15px] leading-5 outline-none',
+            'placeholder:text-gray-400',
+          )}
+          disabled={sending}
         />
-
-        <EditorToolbar
-          testIdPrefix={prefix}
-          onAttach={() => editor.fileInputRef.current?.click()}
-          onEmojiToggle={() => editor.setShowEmojiPicker(!editor.showEmojiPicker)}
-          onMention={editor.handleMentionButtonClick}
-          isRecording={editor.isRecording}
-          recordingDuration={editor.recordingDuration}
-          onStartRecording={editor.startRecording}
-          onStopRecording={editor.stopRecording}
-          onCancelRecording={editor.cancelRecording}
+        <button
+          onClick={handleSend}
+          disabled={!value.trim() || sending}
+          className={cn(
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+            value.trim() && !sending
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed',
+          )}
+          aria-label="Send message"
+          data-testid={`${prefix}send-button`}
         >
-          {/* Send button group with schedule dropdown */}
-          <div className="flex items-center relative" ref={scheduleMenuRef}>
-            <button
-              data-testid={`${prefix}send-button`}
-              onClick={handleSend}
-              disabled={!hasContent}
-              className={cn(
-                'flex h-7 items-center justify-center rounded-l px-2 transition-colors',
-                hasContent
-                  ? 'bg-slack-btn text-white hover:bg-slack-btn-hover'
-                  : 'text-slack-disabled',
-              )}
-            >
-              <SendHorizontal className="h-4 w-4" />
-            </button>
-            <button
-              data-testid={`${prefix}schedule-button`}
-              onClick={() => hasContent && setShowScheduleMenu((v) => !v)}
-              disabled={!hasContent}
-              className={cn(
-                'flex h-7 w-5 items-center justify-center rounded-r border-l transition-colors',
-                hasContent
-                  ? 'bg-slack-btn text-white hover:bg-slack-btn-hover border-slack-btn-hover'
-                  : 'text-slack-disabled border-slack-border',
-              )}
-              title="Schedule message"
-            >
-              <ChevronDown className="h-3 w-3" />
-            </button>
-
-            {showScheduleMenu && (
-              <ScheduleMenu
-                onSchedule={handleSchedule}
-                onCustom={handleCustomSchedule}
-                isScheduling={isScheduling}
-              />
-            )}
-          </div>
-        </EditorToolbar>
+          <SendHorizontal className="h-4 w-4" />
+        </button>
       </div>
-
-      <p className="mt-1 text-xs text-slack-hint">
-        <kbd className="rounded bg-slack-active-tab px-1 py-0.5 text-[10px] font-medium">Enter</kbd>{' '}
-        to send,{' '}
-        <kbd className="rounded bg-slack-active-tab px-1 py-0.5 text-[10px] font-medium">
-          Shift + Enter
-        </kbd>{' '}
-        for new line
-      </p>
-
-      {sendError && <ErrorBanner message={sendError} onDismiss={clearSendError} />}
-      {editor.uploadError && <ErrorBanner message={editor.uploadError} onDismiss={() => editor.setUploadError(null)} />}
-      {scheduleError && <ErrorBanner message={scheduleError} onDismiss={() => setScheduleError(null)} />}
-      {scheduleConfirm && <SuccessBanner message={scheduleConfirm} data-testid="schedule-confirm" />}
-
-      {showScheduleModal && (
-        <ScheduleModal
-          onSchedule={handleSchedule}
-          onClose={() => setShowScheduleModal(false)}
-          isScheduling={isScheduling}
-        />
-      )}
-
-      {editor.showLinkModal && (
-        <LinkModal
-          linkUrl={editor.linkUrl}
-          linkText={editor.linkText}
-          onLinkUrlChange={editor.setLinkUrl}
-          onLinkTextChange={editor.setLinkText}
-          onSave={editor.handleLinkSave}
-          onClose={() => editor.setShowLinkModal(false)}
-        />
-      )}
     </div>
   );
-});
+}

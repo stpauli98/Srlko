@@ -1,9 +1,7 @@
 import { create } from 'zustand';
 import * as api from '@/lib/api';
-import { clearDownloadToken } from '@/lib/api';
 import { disconnectSocket } from '@/lib/socket';
 import type { User } from '@/lib/types';
-import { useNotificationStore } from './useNotificationStore';
 
 let storageListenerRegistered = false;
 
@@ -15,7 +13,7 @@ interface AuthState {
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  register: (name: string, email: string, password: string, inviteCode?: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
   hydrate: () => void;
 }
@@ -45,19 +43,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
-    // Unsubscribe from push notifications before clearing auth
-    useNotificationStore.getState().unsubscribe().catch(() => {});
     localStorage.removeItem('token');
-    clearDownloadToken();
     disconnectSocket();
-    // Hard reload to wipe all in-memory Zustand state (messages, DMs, channels, bookmarks)
+    // Hard reload to wipe all in-memory Zustand state
     window.location.href = '/login';
   },
 
-  register: async (name: string, email: string, password: string, inviteCode?: string) => {
+  register: async (name: string, email: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const { user, token } = await api.register(name, email, password, inviteCode);
+      const { user, token } = await api.register(name, email, password);
       localStorage.setItem('token', token);
       set({
         user: { ...user, status: 'online', role: user.role },
@@ -80,7 +75,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        // JWT payload only has { userId, tokenVersion } — placeholder until getMyProfile() resolves
         const payload = JSON.parse(atob(token.split('.')[1]));
         set({
           user: {
@@ -115,7 +109,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isHydrating: false });
     }
 
-    // Cross-tab session sync: detect logout from another tab (guard against StrictMode double-call)
     if (!storageListenerRegistered) {
       storageListenerRegistered = true;
       window.addEventListener('storage', (e) => {

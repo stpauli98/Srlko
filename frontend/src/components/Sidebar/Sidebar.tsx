@@ -1,25 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  FileText,
-  Bookmark,
   ChevronDown,
   ChevronRight,
   Plus,
   SquarePen,
-  Bell,
-  BellOff,
   LogOut,
-  Star,
   User,
-  Shield,
   Inbox,
+  Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChannelStore } from '@/stores/useChannelStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useProfileStore } from '@/stores/useProfileStore';
-import { useNotificationStore } from '@/stores/useNotificationStore';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ChannelItem } from './ChannelItem';
@@ -30,20 +24,18 @@ import type { Channel } from '@/lib/types';
 import { getChannels } from '@/lib/api';
 import type { AuthUser } from '@/lib/api';
 import { useMobileStore } from '@/stores/useMobileStore';
-// HuddleBar moved to global render in App.tsx
 
 export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { channels, directMessages, activeChannelId, activeDMId, startDM, createChannel, joinChannel, fetchChannels } =
+  const { channels, directMessages, activeChannelId, activeDMId, startDM, createChannel, joinChannel } =
     useChannelStore();
   const { user, logout } = useAuthStore();
   const { openProfile } = useProfileStore();
-  const { permission, isSubscribed, subscribe, unsubscribe } = useNotificationStore();
   const closeSidebar = useMobileStore((s) => s.closeSidebar);
   const [channelsExpanded, setChannelsExpanded] = useState(true);
   const [dmsExpanded, setDmsExpanded] = useState(true);
-  const activeNav = location.pathname === '/unreads' ? 'unreads' : location.pathname === '/files' ? 'files' : location.pathname === '/later' ? 'later' : location.pathname === '/admin' ? 'admin' : 'dms';
+  const activeNav = location.pathname === '/unreads' ? 'unreads' : 'dms';
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [showAddChannelDialog, setShowAddChannelDialog] = useState(false);
   const [browseChannels, setBrowseChannels] = useState<Channel[]>([]);
@@ -57,8 +49,6 @@ export function Sidebar() {
 
   const navItems = [
     { icon: Inbox, label: 'Unreads', id: 'unreads', badge: totalUnreadCount > 0 ? totalUnreadCount : undefined },
-    { icon: Bookmark, label: 'Later', id: 'later' },
-    { icon: FileText, label: 'Files', id: 'files' },
   ];
 
   // Close avatar menu when clicking outside
@@ -169,22 +159,6 @@ export function Sidebar() {
                 } else {
                   navTo('/unreads');
                 }
-              } else if (item.id === 'files') {
-                if (activeNav === 'files') {
-                  const firstChannel = channels.find((ch) => ch.isMember);
-                  if (firstChannel) navTo(`/c/${firstChannel.id}`);
-                } else {
-                  navTo('/files');
-                }
-              } else if (item.id === 'later') {
-                if (activeNav === 'later') {
-                  const firstChannel = channels.find((ch) => ch.isMember);
-                  if (firstChannel) navTo(`/c/${firstChannel.id}`);
-                } else {
-                  navTo('/later');
-                }
-              } else if (item.id === 'dms') {
-                handleOpenAddTeammates();
               }
             }}
             className={cn(
@@ -204,30 +178,6 @@ export function Sidebar() {
           </button>
         ))}
 
-        {/* Admin Nav Item - only visible to admins and owner */}
-        {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
-          <button
-            data-testid="nav-item-admin"
-            onClick={() => {
-              if (activeNav === 'admin') {
-                const firstChannel = channels.find((ch) => ch.isMember);
-                if (firstChannel) navTo(`/c/${firstChannel.id}`);
-              } else {
-                navTo('/admin');
-              }
-            }}
-            className={cn(
-              'relative flex flex-col h-[68px] w-[52px] items-center justify-center gap-1 rounded-lg transition-colors',
-              activeNav === 'admin'
-                ? 'bg-slack-sidebar-hover/50 text-white'
-                : 'text-white/70 hover:bg-white/10 hover:text-white'
-            )}
-          >
-            <Shield className="h-5 w-5" />
-            <span className="text-[11px] font-medium">Admin</span>
-          </button>
-        )}
-
         {/* Spacer */}
         <div className="flex-1" />
 
@@ -239,7 +189,7 @@ export function Sidebar() {
               onClick={() => setShowAvatarMenu(!showAvatarMenu)}
             >
               <Avatar
-                src={user.avatar}
+                src={user.avatar ?? undefined}
                 alt={user.name}
                 fallback={user.name}
                 size="md"
@@ -257,17 +207,6 @@ export function Sidebar() {
                   <User className="h-4 w-4" />
                   Profile
                 </Button>
-                {permission === 'unsupported' ? null : permission === 'denied' ? (
-                  <Button variant="menu-item" className="text-slack-hint cursor-default" onClick={() => setShowAvatarMenu(false)}>
-                    <BellOff className="h-4 w-4" />
-                    Notifications blocked
-                  </Button>
-                ) : (
-                  <Button variant="menu-item" onClick={() => { setShowAvatarMenu(false); isSubscribed ? unsubscribe() : subscribe(); }}>
-                    {isSubscribed ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-                    {isSubscribed ? 'Disable notifications' : 'Enable notifications'}
-                  </Button>
-                )}
                 <Button variant="menu-item" onClick={() => { setShowAvatarMenu(false); logout(); }}>
                   <LogOut className="h-4 w-4" />
                   Sign out

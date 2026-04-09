@@ -12,7 +12,12 @@ export function connectSocket(): Socket | null {
   const token = localStorage.getItem('token');
   if (!token) return null;
 
-  socket = io({
+  // In production, VITE_API_URL points to the Railway backend.
+  // In development it is unset → socket.io-client uses the current origin,
+  // which Vite proxies to localhost:3000.
+  const apiUrl = import.meta.env.VITE_API_URL || undefined;
+
+  socket = io(apiUrl, {
     auth: (cb) => { cb({ token: localStorage.getItem('token') }); },
     transports: ['websocket', 'polling'],
   });
