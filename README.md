@@ -1,57 +1,54 @@
-# Srlko
+# Tri Lame — web stranica
 
-Real-time chat and 1-on-1 audio call platform (Slack / Discord style).
+Landing stranica za **Tri Lame coffee & cookies shop (to go)**, Banjaluka.
+Napravljena u **Next.js 15 + TypeScript + Tailwind CSS v4**.
 
-## Stack
-
-- **Frontend:** React 19 + Vite + TypeScript + Tailwind CSS + Zustand
-- **Backend:** Node.js 22 + Express + Socket.io + Prisma
-- **Database:** PostgreSQL
-- **Real-time chat:** Socket.io
-- **Voice calls:** WebRTC (Socket.io as signaling server)
-
-## MVP features
-
-- Email / password auth (JWT)
-- Channels (public + private, grouped chat)
-- Direct messages with read receipts and reactions
-- Message search
-- 1-on-1 audio calls ("huddles")
-- Presence (online / offline)
-- Unreads inbox
-- Mobile-responsive layout
-
-## Local development
+## Pokretanje lokalno
 
 ```bash
-# 1. Start Postgres
-docker compose up -d
-
-# 2. Backend
-cd backend
-cp .env.example .env             # edit JWT_SECRET
 npm install
-npx prisma migrate dev --name init
-npm run db:seed                  # optional: creates alice@srlko.dev / bob@srlko.dev (pw: password123)
-npm run dev                      # http://localhost:3000
-
-# 3. Frontend (in a second terminal)
-cd frontend
-npm install
-npm run dev                      # http://localhost:5173
+npm run dev      # http://localhost:3000
 ```
 
-## Deployment
+Produkcijski build:
 
-- **Frontend:** Vercel (uses `vercel.json`)
-- **Backend:** Railway (uses `backend/railway.json`)
-- **Database:** Neon or Supabase (both free)
+```bash
+npm run build
+npm start
+```
 
-Set env vars:
+## Gdje se mijenja sadržaj
 
-- **Vercel:** `VITE_API_URL` → `https://your-backend.up.railway.app`
-- **Railway:** `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN` → `https://your-app.vercel.app`
+Sav tekst, cijene, radno vrijeme i kontakt su na jednom mjestu:
 
-## Attribution
+- **`content/site.config.ts`** — naziv, slogan, „o nama" tekst, cijeli cjenovnik,
+  galerija, adresa, radno vrijeme, Instagram link, Google Maps.
 
-Derived from [ncvgl/slawk](https://github.com/ncvgl/slawk) (MIT). See `LICENSE`.
+Ne diraš komponente — samo ovaj fajl.
+
+## Slike
+
+U `public/images/` su trenutno **brend-SVG placeholderi** (logo, hero, galerija) u
+narandžasto/krem stilu sa Instagrama. Da ubaciš prave fotke:
+
+1. Stavi fotku u `public/images/` (npr. `gallery-cookies.jpg`).
+2. U `content/site.config.ts` promijeni putanju (npr. `src: "/images/gallery-cookies.jpg"`).
+
+Preporučene fotke za zamjenu: `logo`, `hero`, `about`, te `gallery-*`.
+Za logo je najbolje staviti zvaničnu PNG/SVG verziju (čista, bez pozadine).
+
+## Boje brenda
+
+Definisane na jednom mjestu u `app/globals.css` (`@theme`):
+
+| Token            | Boja      | Upotreba                       |
+| ---------------- | --------- | ------------------------------ |
+| `--color-orange` | `#ea5b24` | primarna (logo, dugmad, akcenti) |
+| `--color-cream`  | `#f6efe3` | pozadina                        |
+| `--color-olive`  | `#6f6c39` | tabla menija / akcent           |
+| `--color-charcoal` | `#1d1a17` | tekst, footer                 |
+
+## Deploy (Vercel)
+
+Poveži repo na Vercel — Framework: **Next.js** (automatski prepoznat, root projekta).
+Bez dodatnih env varijabli.
