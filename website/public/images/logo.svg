@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Tri Lame">
+  <circle cx="100" cy="100" r="99" fill="#f6efe3"/>
+  <circle cx="100" cy="100" r="92" fill="#ea5b24"/>
+  <!-- sunburst -->
+  <g stroke="#f6efe3" stroke-width="3" stroke-linecap="round">
+    <line x1="100" y1="56" x2="100" y2="30"/>
+    <line x1="100" y1="56" x2="78" y2="36"/>
+    <line x1="100" y1="56" x2="122" y2="36"/>
+    <line x1="100" y1="56" x2="62" y2="46"/>
+    <line x1="100" y1="56" x2="138" y2="46"/>
+    <line x1="100" y1="56" x2="50" y2="64"/>
+    <line x1="100" y1="56" x2="150" y2="64"/>
+  </g>
+  <circle cx="100" cy="64" r="13" fill="#f6efe3"/>
+  <!-- three llamas -->
+  <g fill="#f6efe3">
+    <g transform="translate(46,92) scale(0.85)">
+      <ellipse cx="17" cy="34" rx="13" ry="8"/>
+      <path d="M22 30 q4 -14 6 -20 l4 1 q-3 8 -5 21 z"/>
+      <path d="M27 9 q4 -3 7 -1 q2 1 1 4 l-2 4 q-4 1 -7 -2 z"/>
+      <path d="M30 6 l1 -6 l2 5 z"/>
+      <path d="M34 6 l2 -6 l1 6 z"/>
+      <rect x="8" y="40" width="3.5" height="14" rx="1.5"/>
+      <rect x="14" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="20" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="25" y="40" width="3.5" height="14" rx="1.5"/>
+    </g>
+    <g transform="translate(82,86) scale(0.95)">
+      <ellipse cx="17" cy="34" rx="13" ry="8"/>
+      <path d="M22 30 q4 -14 6 -20 l4 1 q-3 8 -5 21 z"/>
+      <path d="M27 9 q4 -3 7 -1 q2 1 1 4 l-2 4 q-4 1 -7 -2 z"/>
+      <path d="M30 6 l1 -6 l2 5 z"/>
+      <path d="M34 6 l2 -6 l1 6 z"/>
+      <rect x="8" y="40" width="3.5" height="14" rx="1.5"/>
+      <rect x="14" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="20" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="25" y="40" width="3.5" height="14" rx="1.5"/>
+    </g>
+    <g transform="translate(122,92) scale(0.85)">
+      <ellipse cx="17" cy="34" rx="13" ry="8"/>
+      <path d="M22 30 q4 -14 6 -20 l4 1 q-3 8 -5 21 z"/>
+      <path d="M27 9 q4 -3 7 -1 q2 1 1 4 l-2 4 q-4 1 -7 -2 z"/>
+      <path d="M30 6 l1 -6 l2 5 z"/>
+      <path d="M34 6 l2 -6 l1 6 z"/>
+      <rect x="8" y="40" width="3.5" height="14" rx="1.5"/>
+      <rect x="14" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="20" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="25" y="40" width="3.5" height="14" rx="1.5"/>
+    </g>
+  </g>
+  <!-- ground -->
+  <path d="M30 150 q70 26 140 0 v20 q-70 24 -140 0 z" fill="#f6efe3" opacity="0.9"/>
+</svg>

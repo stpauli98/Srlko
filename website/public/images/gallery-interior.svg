@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Enterijer">
+  <rect width="400" height="400" fill="#6f6c39"/>
+  <rect y="300" width="400" height="100" fill="#9c6a3c"/>
+  <rect x="60" y="70" width="80" height="110" rx="4" fill="#1d1a17"/>
+  <rect x="160" y="55" width="90" height="125" rx="4" fill="#1d1a17"/>
+  <rect x="270" y="80" width="75" height="105" rx="4" fill="#1d1a17"/>
+  <circle cx="205" cy="115" r="26" fill="#ea5b24"/>
+  <g fill="#3c4622">
+    <path d="M30 230 q40 -50 70 10 q-50 14 -70 -10z"/>
+    <path d="M20 280 q50 -30 80 24 q-60 8 -80 -24z"/>
+  </g>
+  <text x="320" y="360" text-anchor="middle" fill="#f6efe3" font-family="Georgia, serif" font-size="16" font-weight="bold" opacity="0.8">TRI LAME</text>
+</svg>

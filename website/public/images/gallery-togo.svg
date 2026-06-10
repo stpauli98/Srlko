@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Za ponijeti">
+  <rect width="400" height="400" fill="#ea5b24"/>
+  <g transform="translate(110,110)">
+    <rect x="-34" y="0" width="68" height="16" rx="3" fill="#3a2a20"/>
+    <path d="M-30 16 h60 l-8 150 q-1 9 -10 9 h-24 q-9 0 -10 -9 z" fill="#f6efe3"/>
+    <rect x="-30" y="70" width="60" height="30" fill="#1d1a17"/>
+    <text x="0" y="90" text-anchor="middle" fill="#f6efe3" font-family="Georgia, serif" font-size="13" font-weight="bold">TRI LAME</text>
+  </g>
+  <g transform="translate(250,140)">
+    <rect x="-30" y="0" width="60" height="150" rx="14" fill="#cdd9a8"/>
+    <rect x="-30" y="0" width="60" height="60" rx="14" fill="#8aa05a"/>
+    <rect x="-22" y="55" width="44" height="26" fill="#1d1a17"/>
+    <text x="0" y="73" text-anchor="middle" fill="#f6efe3" font-family="Georgia, serif" font-size="11" font-weight="bold">TRI LAME</text>
+  </g>
+  <text x="200" y="350" text-anchor="middle" fill="#f6efe3" font-family="Georgia, serif" font-size="20" font-weight="bold">tvoj ritual u hodu</text>
+</svg>

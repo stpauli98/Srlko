@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/*
+  Tri Lame — brend paleta.
+  Boje izvučene sa Instagram profila (@trilame.bl): živa narandžasta sa logoa i
+  enterijera, krem pozadina, maslinasto-zelena tabla menija, tamno ugljena za tekst.
+  Mijenjaš na jednom mjestu — ovdje.
+*/
+@theme {
+  --color-orange: #ea5b24;
+  --color-orange-dark: #c8470f;
+  --color-cream: #f6efe3;
+  --color-cream-dark: #ece1cd;
+  --color-olive: #6f6c39;
+  --color-charcoal: #1d1a17;
+  --color-mocha: #7c6a5c;
+
+  --font-serif: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-cream);
+    color: var(--color-charcoal);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-serif);
+  }
+
+  /* odmak za sticky navbar pri skrolu na sidro */
+  section[id] {
+    scroll-margin-top: 5rem;
+  }
+}

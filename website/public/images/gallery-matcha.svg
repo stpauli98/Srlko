@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Matcha latte">
+  <rect width="400" height="400" fill="#ea5b24"/>
+  <rect x="155" y="90" width="90" height="230" rx="14" fill="#f6efe3" opacity="0.35"/>
+  <rect x="155" y="180" width="90" height="140" rx="14" fill="#8aa05a"/>
+  <rect x="155" y="150" width="90" height="40" fill="#cdd9a8"/>
+  <rect x="170" y="120" width="60" height="120" rx="6" fill="#1d1a17" opacity="0.85"/>
+  <text x="200" y="190" text-anchor="middle" fill="#f6efe3" font-family="Georgia, serif" font-size="15" font-weight="bold">TRI</text>
+  <text x="200" y="212" text-anchor="middle" fill="#f6efe3" font-family="Georgia, serif" font-size="15" font-weight="bold">LAME</text>
+  <text x="200" y="360" text-anchor="middle" fill="#f6efe3" font-family="Georgia, serif" font-size="18" font-weight="bold" opacity="0.85">matcha latte</text>
+</svg>

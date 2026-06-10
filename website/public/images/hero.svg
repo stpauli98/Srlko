@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" role="img" aria-label="Tri Lame coffee & cookies">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ef7a45"/>
+      <stop offset="100%" stop-color="#ea5b24"/>
+    </radialGradient>
+  </defs>
+  <circle cx="300" cy="290" r="230" fill="url(#g)"/>
+  <!-- sunburst -->
+  <g stroke="#f6efe3" stroke-width="6" stroke-linecap="round" opacity="0.95">
+    <line x1="300" y1="190" x2="300" y2="120"/>
+    <line x1="300" y1="190" x2="240" y2="135"/>
+    <line x1="300" y1="190" x2="360" y2="135"/>
+    <line x1="300" y1="190" x2="195" y2="165"/>
+    <line x1="300" y1="190" x2="405" y2="165"/>
+    <line x1="300" y1="190" x2="165" y2="210"/>
+    <line x1="300" y1="190" x2="435" y2="210"/>
+  </g>
+  <circle cx="300" cy="205" r="34" fill="#f6efe3"/>
+  <!-- three llamas -->
+  <g fill="#f6efe3">
+    <g transform="translate(170,270) scale(2.0)">
+      <ellipse cx="17" cy="34" rx="13" ry="8"/>
+      <path d="M22 30 q4 -14 6 -20 l4 1 q-3 8 -5 21 z"/>
+      <path d="M27 9 q4 -3 7 -1 q2 1 1 4 l-2 4 q-4 1 -7 -2 z"/>
+      <path d="M30 6 l1 -6 l2 5 z"/><path d="M34 6 l2 -6 l1 6 z"/>
+      <rect x="8" y="40" width="3.5" height="14" rx="1.5"/><rect x="14" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="20" y="41" width="3.5" height="13" rx="1.5"/><rect x="25" y="40" width="3.5" height="14" rx="1.5"/>
+    </g>
+    <g transform="translate(252,255) scale(2.3)">
+      <ellipse cx="17" cy="34" rx="13" ry="8"/>
+      <path d="M22 30 q4 -14 6 -20 l4 1 q-3 8 -5 21 z"/>
+      <path d="M27 9 q4 -3 7 -1 q2 1 1 4 l-2 4 q-4 1 -7 -2 z"/>
+      <path d="M30 6 l1 -6 l2 5 z"/><path d="M34 6 l2 -6 l1 6 z"/>
+      <rect x="8" y="40" width="3.5" height="14" rx="1.5"/><rect x="14" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="20" y="41" width="3.5" height="13" rx="1.5"/><rect x="25" y="40" width="3.5" height="14" rx="1.5"/>
+    </g>
+    <g transform="translate(350,270) scale(2.0)">
+      <ellipse cx="17" cy="34" rx="13" ry="8"/>
+      <path d="M22 30 q4 -14 6 -20 l4 1 q-3 8 -5 21 z"/>
+      <path d="M27 9 q4 -3 7 -1 q2 1 1 4 l-2 4 q-4 1 -7 -2 z"/>
+      <path d="M30 6 l1 -6 l2 5 z"/><path d="M34 6 l2 -6 l1 6 z"/>
+      <rect x="8" y="40" width="3.5" height="14" rx="1.5"/><rect x="14" y="41" width="3.5" height="13" rx="1.5"/>
+      <rect x="20" y="41" width="3.5" height="13" rx="1.5"/><rect x="25" y="40" width="3.5" height="14" rx="1.5"/>
+    </g>
+  </g>
+  <path d="M90 430 q210 70 420 0 v40 q-210 64 -420 0 z" fill="#f6efe3" opacity="0.9"/>
+  <!-- floating cookie -->
+  <g transform="translate(470,120)">
+    <circle r="46" fill="#7a4a28"/>
+    <circle r="46" fill="#8a5631" opacity="0.6"/>
+    <circle cx="-14" cy="-10" r="6" fill="#3a2418"/>
+    <circle cx="12" cy="-6" r="5" fill="#3a2418"/>
+    <circle cx="2" cy="16" r="6" fill="#3a2418"/>
+    <circle cx="-18" cy="14" r="4" fill="#3a2418"/>
+  </g>
+  <!-- to-go cup -->
+  <g transform="translate(70,150)">
+    <rect x="-30" y="0" width="60" height="14" rx="3" fill="#3a2a20"/>
+    <path d="M-26 14 h52 l-7 70 q-1 8 -9 8 h-20 q-8 0 -9 -8 z" fill="#f6efe3" stroke="#d9772e" stroke-width="3"/>
+    <rect x="-26" y="40" width="52" height="16" fill="#ea5b24" opacity="0.85"/>
+  </g>
+</svg>

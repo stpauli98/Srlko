@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Vitrina sa kolacicima">
+  <rect width="400" height="400" fill="#2a2622"/>
+  <rect x="30" y="120" width="340" height="200" rx="8" fill="#3a352f"/>
+  <rect x="30" y="120" width="340" height="200" rx="8" fill="none" stroke="#5a5249" stroke-width="3"/>
+  <rect x="40" y="250" width="320" height="60" fill="#b9824c"/>
+  <g>
+    <circle cx="90" cy="250" r="26" fill="#7a4a28"/>
+    <circle cx="150" cy="252" r="26" fill="#6f7d3a"/>
+    <circle cx="210" cy="250" r="26" fill="#7a4a28"/>
+    <circle cx="270" cy="252" r="26" fill="#caa15e"/>
+    <circle cx="330" cy="250" r="26" fill="#5c3320"/>
+  </g>
+  <rect x="30" y="120" width="340" height="60" fill="#f6efe3" opacity="0.06"/>
+  <text x="200" y="360" text-anchor="middle" fill="#ea5b24" font-family="Georgia, serif" font-size="18" font-weight="bold">svježe pečeno</text>
+</svg>
